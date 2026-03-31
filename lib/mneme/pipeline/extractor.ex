@@ -17,9 +17,29 @@ defmodule Mneme.Pipeline.Extractor do
   Extract entities and relations from a chunk's content using the configured provider.
   """
   def extract_from_chunk(chunk_content, opts \\ []) do
+    start_time = System.monotonic_time()
     provider = Config.extraction_provider()
     provider_opts = Keyword.merge(Config.extraction_opts(), opts)
-    provider.extract(chunk_content, provider_opts)
+    result = provider.extract(chunk_content, provider_opts)
+    duration = System.monotonic_time() - start_time
+
+    case result do
+      {:ok, %{entities: entities, relations: relations}} ->
+        Mneme.Telemetry.event([:mneme, :extract, :stop], %{
+          duration: duration,
+          entities_count: length(entities),
+          relations_count: length(relations)
+        })
+
+      _ ->
+        Mneme.Telemetry.event([:mneme, :extract, :stop], %{
+          duration: duration,
+          entities_count: 0,
+          relations_count: 0
+        })
+    end
+
+    result
   end
 
   @doc """

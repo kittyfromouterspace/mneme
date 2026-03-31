@@ -18,72 +18,76 @@ defmodule Mneme.Pipeline do
   Returns `{:ok, pipeline_run}` or `{:error, reason}`.
   """
   def process(document, opts \\ []) do
-    repo = Config.repo()
-    owner_id = document.owner_id
+    telemetry_metadata = %{document_id: document.id, owner_id: document.owner_id}
 
-    {:ok, run} =
-      %PipelineRun{}
-      |> PipelineRun.changeset(%{
-        document_id: document.id,
-        status: "pending",
-        owner_id: owner_id,
-        scope_id: document.scope_id
-      })
-      |> repo.insert()
+    Mneme.Telemetry.span([:mneme, :pipeline], telemetry_metadata, fn ->
+      repo = Config.repo()
+      owner_id = document.owner_id
 
-    scope_id = document.scope_id
+      {:ok, run} =
+        %PipelineRun{}
+        |> PipelineRun.changeset(%{
+          document_id: document.id,
+          status: "pending",
+          owner_id: owner_id,
+          scope_id: document.scope_id
+        })
+        |> repo.insert()
 
-    pipeline_opts =
-      Keyword.merge(opts,
-        owner_id: owner_id,
-        scope_id: scope_id,
-        collection_id: document.collection_id
-      )
+      scope_id = document.scope_id
 
-    result =
-      with {:ok, run} <- update_run(run, "chunking", repo),
-           {:ok, chunks} <- do_chunk(document, pipeline_opts, repo),
-           {:ok, run} <- update_run(run, "embedding", %{chunks_created: length(chunks)}, repo),
-           {:ok, chunks} <- do_embed_chunks(chunks),
-           {:ok, run} <- update_run(run, "extracting", %{chunks_embedded: length(chunks)}, repo),
-           {:ok, extraction} <- do_extract(chunks, pipeline_opts),
-           {:ok, run} <-
-             update_run(
-               run,
-               "syncing",
-               %{
-                 entities_extracted: length(extraction.entities),
-                 relations_extracted: length(extraction.relations)
-               },
-               repo
-             ),
-           {:ok, _} <- do_embed_entities(extraction.entities),
-           {:ok, _run} <- update_run(run, "complete", repo) do
-        # Mark document as ready
-        document
-        |> Ecto.Changeset.change(%{status: "ready"})
-        |> repo.update()
+      pipeline_opts =
+        Keyword.merge(opts,
+          owner_id: owner_id,
+          scope_id: scope_id,
+          collection_id: document.collection_id
+        )
 
-        {:ok, run}
+      result =
+        with {:ok, run} <- update_run(run, "chunking", repo),
+             {:ok, chunks} <- do_chunk(document, pipeline_opts, repo),
+             {:ok, run} <- update_run(run, "embedding", %{chunks_created: length(chunks)}, repo),
+             {:ok, chunks} <- do_embed_chunks(chunks),
+             {:ok, run} <- update_run(run, "extracting", %{chunks_embedded: length(chunks)}, repo),
+             {:ok, extraction} <- do_extract(chunks, pipeline_opts),
+             {:ok, run} <-
+               update_run(
+                 run,
+                 "syncing",
+                 %{
+                   entities_extracted: length(extraction.entities),
+                   relations_extracted: length(extraction.relations)
+                 },
+                 repo
+               ),
+             {:ok, _} <- do_embed_entities(extraction.entities),
+             {:ok, _run} <- update_run(run, "complete", repo) do
+          # Mark document as ready
+          document
+          |> Ecto.Changeset.change(%{status: "ready"})
+          |> repo.update()
+
+          {:ok, run}
+        end
+
+      case result do
+        {:ok, _} ->
+          result
+
+        {:error, reason} ->
+          Logger.error("Mneme.Pipeline: failed for document #{document.id}: #{inspect(reason)}")
+
+          run
+          |> PipelineRun.changeset(%{status: "failed", error: inspect(reason)})
+          |> repo.update()
+
+          document
+          |> Ecto.Changeset.change(%{status: "failed"})
+          |> repo.update()
+
+          {:error, reason}
       end
-
-    case result do
-      {:ok, _} ->
-        result
-
-      {:error, reason} ->
-        Logger.error("Mneme.Pipeline: failed for document #{document.id}: #{inspect(reason)}")
-
-        run
-        |> PipelineRun.changeset(%{status: "failed", error: inspect(reason)})
-        |> repo.update()
-
-        document
-        |> Ecto.Changeset.change(%{status: "failed"})
-        |> repo.update()
-
-        {:error, reason}
-    end
+    end)
   end
 
   @doc "Run the pipeline asynchronously."

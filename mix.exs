@@ -34,7 +34,8 @@ defmodule Mneme.MixProject do
       {:postgrex, "~> 0.19"},
       {:pgvector, "~> 0.3"},
       {:jason, "~> 1.4"},
-      {:req, "~> 0.5"}
+      {:req, "~> 0.5"},
+      {:telemetry, "~> 1.0"}
     ]
   end
 

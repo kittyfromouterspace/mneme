@@ -18,24 +18,42 @@ defmodule Mneme.Search.Vector do
   - `:tier` — `:full`, `:lightweight`, or `:both` (default: `:both`)
   """
   def search(query_text, opts \\ []) do
+    start_time = System.monotonic_time()
     limit = Keyword.get(opts, :limit, 10)
     min_score = Keyword.get(opts, :min_score, 0.0)
     tier = Keyword.get(opts, :tier, :both)
 
-    case Embedder.embed_query(query_text) do
-      {:ok, query_embedding} ->
-        embedding_str = "[#{Enum.join(query_embedding, ",")}]"
+    result =
+      case Embedder.embed_query(query_text) do
+        {:ok, query_embedding} ->
+          embedding_str = "[#{Enum.join(query_embedding, ",")}]"
 
-        results =
-          []
-          |> maybe_search_chunks(embedding_str, opts, limit, min_score, tier)
-          |> maybe_search_entries(embedding_str, opts, limit, min_score, tier)
+          results =
+            []
+            |> maybe_search_chunks(embedding_str, opts, limit, min_score, tier)
+            |> maybe_search_entries(embedding_str, opts, limit, min_score, tier)
 
-        {:ok, results}
+          {:ok, results}
 
-      {:error, reason} ->
-        {:error, reason}
+        {:error, reason} ->
+          {:error, reason}
+      end
+
+    duration = System.monotonic_time() - start_time
+
+    case result do
+      {:ok, results} ->
+        Mneme.Telemetry.event([:mneme, :search, :vector, :stop], %{
+          duration: duration,
+          result_count: length(results),
+          tier: tier
+        })
+
+      _ ->
+        :ok
     end
+
+    result
   end
 
   @doc "Search chunks only."

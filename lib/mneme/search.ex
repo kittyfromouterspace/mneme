@@ -13,46 +13,54 @@ defmodule Mneme.Search do
   Returns `{:ok, context_pack}` with chunks, entries, entities, relations.
   """
   def search(query_text, opts \\ []) do
-    tier = Keyword.get(opts, :tier, :both)
-    hops = Keyword.get(opts, :hops, 1)
+    metadata = %{
+      tier: Keyword.get(opts, :tier, :both),
+      scope_id: Keyword.get(opts, :scope_id),
+      owner_id: Keyword.get(opts, :owner_id)
+    }
 
-    with {:ok, vector_results} <- Vector.search(query_text, opts) do
-      # Separate by type
-      chunks = Enum.filter(vector_results, &(&1[:result_type] == :chunk))
-      entries = Enum.filter(vector_results, &(&1[:result_type] == :entry))
+    Mneme.Telemetry.span([:mneme, :search], metadata, fn ->
+      tier = Keyword.get(opts, :tier, :both)
+      hops = Keyword.get(opts, :hops, 1)
 
-      # Graph expansion for Tier 1 entities
-      {entities, graph_relations} =
-        if tier in [:full, :both] && Keyword.has_key?(opts, :owner_id) do
-          expand_graph(query_text, opts, hops)
-        else
-          {[], []}
-        end
+      with {:ok, vector_results} <- Vector.search(query_text, opts) do
+        # Separate by type
+        chunks = Enum.filter(vector_results, &(&1[:result_type] == :chunk))
+        entries = Enum.filter(vector_results, &(&1[:result_type] == :entry))
 
-      # Edge following for Tier 2 entries
-      related_entries =
-        if tier in [:lightweight, :both] do
-          entry_ids = Enum.map(entries, & &1["id"]) |> Enum.reject(&is_nil/1)
-
-          case Graph.follow_edges(entry_ids, hops: hops) do
-            {:ok, related} -> related
-            _ -> []
+        # Graph expansion for Tier 1 entities
+        {entities, graph_relations} =
+          if tier in [:full, :both] && Keyword.has_key?(opts, :owner_id) do
+            expand_graph(query_text, opts, hops)
+          else
+            {[], []}
           end
-        else
-          []
-        end
 
-      context_pack = %{
-        chunks: chunks,
-        entries: entries,
-        related_entries: related_entries,
-        entities: entities,
-        relations: graph_relations,
-        query: query_text
-      }
+        # Edge following for Tier 2 entries
+        related_entries =
+          if tier in [:lightweight, :both] do
+            entry_ids = Enum.map(entries, & &1["id"]) |> Enum.reject(&is_nil/1)
 
-      {:ok, context_pack}
-    end
+            case Graph.follow_edges(entry_ids, hops: hops) do
+              {:ok, related} -> related
+              _ -> []
+            end
+          else
+            []
+          end
+
+        context_pack = %{
+          chunks: chunks,
+          entries: entries,
+          related_entries: related_entries,
+          entities: entities,
+          relations: graph_relations,
+          query: query_text
+        }
+
+        {:ok, context_pack}
+      end
+    end)
   end
 
   defp expand_graph(query_text, opts, hops) do

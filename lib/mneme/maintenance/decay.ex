@@ -17,6 +17,7 @@ defmodule Mneme.Maintenance.Decay do
   - `:min_access_count` — Minimum accesses to survive (default: 3)
   """
   def run(opts \\ []) do
+    start_time = System.monotonic_time()
     max_age_days = Keyword.get(opts, :max_age_days, 90)
     min_access_count = Keyword.get(opts, :min_access_count, 3)
     repo = Config.repo()
@@ -31,6 +32,13 @@ defmodule Mneme.Maintenance.Decay do
             e.access_count < ^min_access_count
       )
       |> repo.update_all(set: [entry_type: "archived", updated_at: DateTime.utc_now()])
+
+    duration = System.monotonic_time() - start_time
+
+    Mneme.Telemetry.event([:mneme, :decay, :stop], %{
+      archived_count: count,
+      duration: duration
+    })
 
     Logger.info("Mneme.Decay: archived #{count} stale entries")
     {:ok, count}
