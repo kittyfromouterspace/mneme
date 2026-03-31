@@ -26,11 +26,19 @@ defmodule Mneme.Pipeline do
       |> PipelineRun.changeset(%{
         document_id: document.id,
         status: "pending",
-        owner_id: owner_id
+        owner_id: owner_id,
+        scope_id: document.scope_id
       })
       |> repo.insert()
 
-    pipeline_opts = Keyword.merge(opts, owner_id: owner_id, collection_id: document.collection_id)
+    scope_id = document.scope_id
+
+    pipeline_opts =
+      Keyword.merge(opts,
+        owner_id: owner_id,
+        scope_id: scope_id,
+        collection_id: document.collection_id
+      )
 
     result =
       with {:ok, run} <- update_run(run, "chunking", repo),
@@ -91,6 +99,7 @@ defmodule Mneme.Pipeline do
 
   defp do_chunk(document, opts, repo) do
     owner_id = Keyword.fetch!(opts, :owner_id)
+    scope_id = Keyword.get(opts, :scope_id)
 
     # Delete existing chunks (re-processing)
     from(c in Chunk, where: c.document_id == ^document.id) |> repo.delete_all()
@@ -110,7 +119,8 @@ defmodule Mneme.Pipeline do
             start_offset: raw.start_offset,
             end_offset: raw.end_offset,
             metadata: %{heading_context: raw.heading_context},
-            owner_id: owner_id
+            owner_id: owner_id,
+            scope_id: scope_id
           })
           |> repo.insert()
 
@@ -138,6 +148,7 @@ defmodule Mneme.Pipeline do
   defp do_extract(chunks, opts) do
     collection_id = Keyword.fetch!(opts, :collection_id)
     owner_id = Keyword.fetch!(opts, :owner_id)
+    scope_id = Keyword.get(opts, :scope_id)
 
     {all_entities, all_relations} =
       Enum.reduce(chunks, {[], []}, fn chunk, {entities_acc, relations_acc} ->
@@ -146,7 +157,8 @@ defmodule Mneme.Pipeline do
             {:ok, persisted_entities} =
               Extractor.persist_entities(entities,
                 collection_id: collection_id,
-                owner_id: owner_id
+                owner_id: owner_id,
+                scope_id: scope_id
               )
 
             entity_map =
@@ -157,6 +169,7 @@ defmodule Mneme.Pipeline do
             {:ok, persisted_relations} =
               Extractor.persist_relations(relations, entity_map,
                 owner_id: owner_id,
+                scope_id: scope_id,
                 source_chunk_id: chunk.id
               )
 

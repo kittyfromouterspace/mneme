@@ -21,6 +21,7 @@ defmodule Mneme.Schema.Entity do
     field(:last_seen_at, :utc_datetime_usec)
     field(:embedding, Pgvector.Ecto.Vector)
     field(:owner_id, :binary_id)
+    field(:scope_id, :binary_id)
 
     belongs_to(:collection, Mneme.Schema.Collection, type: :binary_id)
 
@@ -41,6 +42,7 @@ defmodule Mneme.Schema.Entity do
       :last_seen_at,
       :embedding,
       :owner_id,
+      :scope_id,
       :collection_id
     ])
     |> validate_required([:name, :entity_type, :owner_id, :collection_id])

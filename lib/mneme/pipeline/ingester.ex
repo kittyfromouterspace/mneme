@@ -19,6 +19,7 @@ defmodule Mneme.Pipeline.Ingester do
 
   ## Options
   - `:owner_id` (required) — UUID owner
+  - `:scope_id` — Optional workspace/collection scope UUID
   - `:collection_name` — Collection name (default: "default")
   - `:source_type` — "artifact", "conversation", "manual" (default: "manual")
   - `:source_id` — External ID for dedup
@@ -26,6 +27,7 @@ defmodule Mneme.Pipeline.Ingester do
   """
   def ingest(title, content, opts \\ []) do
     owner_id = Keyword.fetch!(opts, :owner_id)
+    scope_id = Keyword.get(opts, :scope_id)
     collection_name = Keyword.get(opts, :collection_name, "default")
     source_type = Keyword.get(opts, :source_type, "manual")
     source_id = Keyword.get(opts, :source_id)
@@ -34,7 +36,7 @@ defmodule Mneme.Pipeline.Ingester do
 
     content_hash = hash_content(content)
 
-    with {:ok, collection} <- ensure_collection(owner_id, collection_name, repo) do
+    with {:ok, collection} <- ensure_collection(owner_id, scope_id, collection_name, repo) do
       case find_existing(collection.id, source_type, source_id, repo) do
         nil ->
           create_document(
@@ -45,6 +47,7 @@ defmodule Mneme.Pipeline.Ingester do
             source_type,
             source_id,
             owner_id,
+            scope_id,
             metadata,
             repo
           )
@@ -58,7 +61,7 @@ defmodule Mneme.Pipeline.Ingester do
     end
   end
 
-  defp ensure_collection(owner_id, name, repo) do
+  defp ensure_collection(owner_id, scope_id, name, repo) do
     query =
       from(c in Collection,
         where: c.owner_id == ^owner_id and c.name == ^name and c.collection_type == "user"
@@ -67,7 +70,12 @@ defmodule Mneme.Pipeline.Ingester do
     case repo.one(query) do
       nil ->
         %Collection{}
-        |> Collection.changeset(%{name: name, collection_type: "user", owner_id: owner_id})
+        |> Collection.changeset(%{
+          name: name,
+          collection_type: "user",
+          owner_id: owner_id,
+          scope_id: scope_id
+        })
         |> repo.insert()
         |> case do
           {:ok, collection} ->
@@ -103,6 +111,7 @@ defmodule Mneme.Pipeline.Ingester do
          source_type,
          source_id,
          owner_id,
+         scope_id,
          metadata,
          repo
        ) do
@@ -117,7 +126,8 @@ defmodule Mneme.Pipeline.Ingester do
       status: "pending",
       token_count: Chunker.estimate_tokens(content),
       metadata: metadata,
-      owner_id: owner_id
+      owner_id: owner_id,
+      scope_id: scope_id
     })
     |> repo.insert()
   end

@@ -29,10 +29,11 @@ defmodule Mneme.Pipeline.Extractor do
   def persist_entities(entities, opts) do
     collection_id = Keyword.fetch!(opts, :collection_id)
     owner_id = Keyword.fetch!(opts, :owner_id)
+    scope_id = Keyword.get(opts, :scope_id)
     repo = Config.repo()
 
     Enum.reduce_while(entities, {:ok, []}, fn entity_data, {:ok, acc} ->
-      case upsert_entity(entity_data, collection_id, owner_id, repo) do
+      case upsert_entity(entity_data, collection_id, owner_id, scope_id, repo) do
         {:ok, entity} -> {:cont, {:ok, acc ++ [entity]}}
         {:error, reason} -> {:halt, {:error, reason}}
       end
@@ -44,6 +45,7 @@ defmodule Mneme.Pipeline.Extractor do
   """
   def persist_relations(relations, entity_map, opts) do
     owner_id = Keyword.fetch!(opts, :owner_id)
+    scope_id = Keyword.get(opts, :scope_id)
     source_chunk_id = Keyword.get(opts, :source_chunk_id)
     repo = Config.repo()
 
@@ -54,7 +56,7 @@ defmodule Mneme.Pipeline.Extractor do
       to_id = Map.get(entity_map, to_key)
 
       if from_id && to_id && from_id != to_id do
-        case upsert_relation(from_id, to_id, rel_data, owner_id, source_chunk_id, repo) do
+        case upsert_relation(from_id, to_id, rel_data, owner_id, scope_id, source_chunk_id, repo) do
           {:ok, relation} -> {:cont, {:ok, acc ++ [relation]}}
           {:error, _reason} -> {:cont, {:ok, acc}}
         end
@@ -64,7 +66,7 @@ defmodule Mneme.Pipeline.Extractor do
     end)
   end
 
-  defp upsert_entity(entity_data, collection_id, owner_id, repo) do
+  defp upsert_entity(entity_data, collection_id, owner_id, scope_id, repo) do
     name = normalize_name(entity_data["name"] || entity_data[:name])
     entity_type = to_string(entity_data["type"] || entity_data[:entity_type])
 
@@ -91,7 +93,8 @@ defmodule Mneme.Pipeline.Extractor do
             mention_count: 1,
             first_seen_at: DateTime.utc_now(),
             last_seen_at: DateTime.utc_now(),
-            owner_id: owner_id
+            owner_id: owner_id,
+            scope_id: scope_id
           })
           |> repo.insert()
 
@@ -103,7 +106,7 @@ defmodule Mneme.Pipeline.Extractor do
     end
   end
 
-  defp upsert_relation(from_id, to_id, rel_data, owner_id, source_chunk_id, repo) do
+  defp upsert_relation(from_id, to_id, rel_data, owner_id, scope_id, source_chunk_id, repo) do
     relation_type = to_string(rel_data["type"] || rel_data[:relation_type])
     weight = parse_weight(rel_data["weight"] || rel_data[:weight])
 
@@ -128,7 +131,8 @@ defmodule Mneme.Pipeline.Extractor do
             relation_type: relation_type,
             weight: weight,
             source_chunk_id: source_chunk_id,
-            owner_id: owner_id
+            owner_id: owner_id,
+            scope_id: scope_id
           })
           |> repo.insert()
 

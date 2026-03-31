@@ -12,6 +12,7 @@ defmodule Mneme.Schema.Collection do
     field(:name, :string)
     field(:collection_type, :string, default: "user")
     field(:owner_id, :binary_id)
+    field(:scope_id, :binary_id)
     field(:metadata, :map, default: %{})
 
     has_many(:documents, Mneme.Schema.Document)
@@ -22,7 +23,7 @@ defmodule Mneme.Schema.Collection do
 
   def changeset(collection, attrs) do
     collection
-    |> cast(attrs, [:name, :collection_type, :owner_id, :metadata])
+    |> cast(attrs, [:name, :collection_type, :owner_id, :scope_id, :metadata])
     |> validate_required([:name, :owner_id])
     |> validate_inclusion(:collection_type, ~w(user workspace topic))
     |> unique_constraint([:owner_id, :name, :collection_type])

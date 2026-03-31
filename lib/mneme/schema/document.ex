@@ -20,6 +20,7 @@ defmodule Mneme.Schema.Document do
     field(:token_count, :integer, default: 0)
     field(:metadata, :map, default: %{})
     field(:owner_id, :binary_id)
+    field(:scope_id, :binary_id)
 
     belongs_to(:collection, Mneme.Schema.Collection, type: :binary_id)
 
@@ -41,6 +42,7 @@ defmodule Mneme.Schema.Document do
       :token_count,
       :metadata,
       :owner_id,
+      :scope_id,
       :collection_id
     ])
     |> validate_required([:content, :content_hash, :owner_id, :collection_id])

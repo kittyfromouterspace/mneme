@@ -15,6 +15,7 @@ defmodule Mneme.Schema.Relation do
     field(:weight, :float, default: 1.0)
     field(:properties, :map, default: %{})
     field(:owner_id, :binary_id)
+    field(:scope_id, :binary_id)
 
     belongs_to(:from_entity, Mneme.Schema.Entity, type: :binary_id)
     belongs_to(:to_entity, Mneme.Schema.Entity, type: :binary_id)
@@ -32,6 +33,7 @@ defmodule Mneme.Schema.Relation do
       :weight,
       :properties,
       :owner_id,
+      :scope_id,
       :from_entity_id,
       :to_entity_id,
       :source_chunk_id

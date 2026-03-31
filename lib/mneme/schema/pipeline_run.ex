@@ -19,6 +19,7 @@ defmodule Mneme.Schema.PipelineRun do
     field(:started_at, :utc_datetime_usec)
     field(:completed_at, :utc_datetime_usec)
     field(:owner_id, :binary_id)
+    field(:scope_id, :binary_id)
 
     belongs_to(:document, Mneme.Schema.Document, type: :binary_id)
 
@@ -36,6 +37,7 @@ defmodule Mneme.Schema.PipelineRun do
       :started_at,
       :completed_at,
       :owner_id,
+      :scope_id,
       :document_id
     ])
     |> validate_required([:document_id, :owner_id])

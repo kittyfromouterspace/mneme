@@ -50,11 +50,13 @@ defmodule Mix.Tasks.Mneme.Gen.Migration do
           add :name, :string, null: false
           add :collection_type, :string, null: false, default: "user"
           add :owner_id, :uuid, null: false
+          add :scope_id, :uuid
           add :metadata, :map, default: %{}
           timestamps(type: :utc_datetime_usec)
         end
 
         create unique_index(:mneme_collections, [:owner_id, :name, :collection_type])
+        create index(:mneme_collections, [:scope_id])
 
         create table(:mneme_documents, primary_key: false) do
           add :id, :binary_id, primary_key: true
@@ -68,12 +70,14 @@ defmodule Mix.Tasks.Mneme.Gen.Migration do
           add :token_count, :integer, default: 0
           add :metadata, :map, default: %{}
           add :owner_id, :uuid, null: false
+          add :scope_id, :uuid
           add :collection_id, references(:mneme_collections, type: :binary_id, on_delete: :delete_all), null: false
           timestamps(type: :utc_datetime_usec)
         end
 
         create unique_index(:mneme_documents, [:collection_id, :source_type, :source_id])
         create index(:mneme_documents, [:owner_id])
+        create index(:mneme_documents, [:scope_id])
 
         create table(:mneme_chunks, primary_key: false) do
           add :id, :binary_id, primary_key: true
@@ -85,12 +89,14 @@ defmodule Mix.Tasks.Mneme.Gen.Migration do
           add :end_offset, :integer, default: 0
           add :metadata, :map, default: %{}
           add :owner_id, :uuid, null: false
+          add :scope_id, :uuid
           add :document_id, references(:mneme_documents, type: :binary_id, on_delete: :delete_all), null: false
           add :inserted_at, :utc_datetime_usec, null: false, default: fragment("now()")
         end
 
         create index(:mneme_chunks, [:document_id])
         create index(:mneme_chunks, [:owner_id])
+        create index(:mneme_chunks, [:scope_id])
 
         execute \"\"\"
         CREATE INDEX mneme_chunks_embedding_idx ON mneme_chunks
@@ -109,12 +115,14 @@ defmodule Mix.Tasks.Mneme.Gen.Migration do
           add :last_seen_at, :utc_datetime_usec
           add :embedding, :"vector(#{dimensions})"
           add :owner_id, :uuid, null: false
+          add :scope_id, :uuid
           add :collection_id, references(:mneme_collections, type: :binary_id, on_delete: :delete_all), null: false
           timestamps(type: :utc_datetime_usec)
         end
 
         create unique_index(:mneme_entities, [:collection_id, :name, :entity_type])
         create index(:mneme_entities, [:owner_id])
+        create index(:mneme_entities, [:scope_id])
 
         execute \"\"\"
         CREATE INDEX mneme_entities_embedding_idx ON mneme_entities
@@ -128,6 +136,7 @@ defmodule Mix.Tasks.Mneme.Gen.Migration do
           add :weight, :float, default: 1.0
           add :properties, :map, default: %{}
           add :owner_id, :uuid, null: false
+          add :scope_id, :uuid
           add :from_entity_id, references(:mneme_entities, type: :binary_id, on_delete: :delete_all), null: false
           add :to_entity_id, references(:mneme_entities, type: :binary_id, on_delete: :delete_all), null: false
           add :source_chunk_id, references(:mneme_chunks, type: :binary_id, on_delete: :nilify_all)
@@ -136,6 +145,7 @@ defmodule Mix.Tasks.Mneme.Gen.Migration do
 
         create unique_index(:mneme_relations, [:from_entity_id, :to_entity_id, :relation_type])
         create index(:mneme_relations, [:owner_id])
+        create index(:mneme_relations, [:scope_id])
 
         create constraint(:mneme_relations, :no_self_relation,
           check: "from_entity_id != to_entity_id"
@@ -151,11 +161,13 @@ defmodule Mix.Tasks.Mneme.Gen.Migration do
           add :started_at, :utc_datetime_usec
           add :completed_at, :utc_datetime_usec
           add :owner_id, :uuid, null: false
+          add :scope_id, :uuid
           add :document_id, references(:mneme_documents, type: :binary_id, on_delete: :delete_all), null: false
           timestamps(type: :utc_datetime_usec)
         end
 
         create index(:mneme_pipeline_runs, [:document_id])
+        create index(:mneme_pipeline_runs, [:scope_id])
 
         # ── Tier 2: Lightweight Knowledge ──────────────────────────────
 

@@ -18,6 +18,7 @@ defmodule Mneme.Schema.Chunk do
     field(:end_offset, :integer, default: 0)
     field(:metadata, :map, default: %{})
     field(:owner_id, :binary_id)
+    field(:scope_id, :binary_id)
 
     belongs_to(:document, Mneme.Schema.Document, type: :binary_id)
 
@@ -35,6 +36,7 @@ defmodule Mneme.Schema.Chunk do
       :end_offset,
       :metadata,
       :owner_id,
+      :scope_id,
       :document_id
     ])
     |> validate_required([:content, :document_id, :owner_id])
