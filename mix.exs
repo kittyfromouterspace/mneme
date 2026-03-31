@@ -1,17 +1,23 @@
 defmodule Mneme.MixProject do
   use Mix.Project
 
+  @version "0.1.0"
+
   def project do
     [
       app: :mneme,
-      version: "0.1.0",
-      elixir: "~> 1.19",
+      version: @version,
+      elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      aliases: aliases(),
+      elixirc_paths: elixirc_paths(Mix.env()),
+      description:
+        "Pluggable memory engine with vector search, knowledge graphs, and LLM extraction",
+      package: package()
     ]
   end
 
-  # Run "mix help compile.app" to learn about applications.
   def application do
     [
       extra_applications: [:logger],
@@ -19,11 +25,29 @@ defmodule Mneme.MixProject do
     ]
   end
 
-  # Run "mix help deps" to learn about dependencies.
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
+
   defp deps do
     [
-      # {:dep_from_hexpm, "~> 0.3.0"},
-      # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
+      {:ecto_sql, "~> 3.12"},
+      {:postgrex, "~> 0.19"},
+      {:pgvector, "~> 0.3"},
+      {:jason, "~> 1.4"},
+      {:req, "~> 0.5"}
+    ]
+  end
+
+  defp aliases do
+    [
+      test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"]
+    ]
+  end
+
+  defp package do
+    [
+      licenses: ["MIT"],
+      links: %{}
     ]
   end
 end
