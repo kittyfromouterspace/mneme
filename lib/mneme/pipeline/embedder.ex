@@ -55,8 +55,10 @@ defmodule Mneme.Pipeline.Embedder do
     end
   end
 
-  @doc "Embed a single entry asynchronously."
+  @doc "Embed a single entry asynchronously. No-op if embedding is disabled."
   def embed_entry_async(%{id: entry_id, content: content}) when is_binary(content) do
+    unless Config.embedding_enabled?(), do: throw(:disabled)
+
     Task.Supervisor.start_child(
       Config.task_supervisor(),
       fn ->
@@ -74,6 +76,8 @@ defmodule Mneme.Pipeline.Embedder do
     )
   rescue
     _ -> :ok
+  catch
+    :disabled -> :ok
   end
 
   def embed_entry_async(_), do: :ok

@@ -3,7 +3,8 @@ defmodule Mneme.EmbeddingProvider do
   Behaviour for embedding providers.
 
   Implementations generate vector embeddings for text.
-  The host app configures which provider to use.
+  The host app configures which provider to use and provides
+  credentials via a `:credentials_fn` callback.
   """
 
   @doc "Number of dimensions in the embedding vectors."
@@ -30,24 +31,41 @@ defmodule Mneme.EmbeddingProvider do
 
   @doc "Generate embedding for a single text using the configured provider."
   def embed(text, opts \\ []) do
-    provider = Mneme.Config.embedding_provider()
-    merged_opts = Keyword.merge(Mneme.Config.embedding_opts(), opts)
-
-    if function_exported?(provider, :embed, 2) do
-      provider.embed(text, merged_opts)
-    else
-      case provider.generate([text], merged_opts) do
-        {:ok, [embedding]} -> {:ok, embedding}
-        {:ok, []} -> {:error, :no_embedding_returned}
-        {:error, reason} -> {:error, reason}
+    with {:ok, provider, merged_opts} <- resolve_provider(opts) do
+      if function_exported?(provider, :embed, 2) do
+        provider.embed(text, merged_opts)
+      else
+        case provider.generate([text], merged_opts) do
+          {:ok, [embedding]} -> {:ok, embedding}
+          {:ok, []} -> {:error, :no_embedding_returned}
+          {:error, reason} -> {:error, reason}
+        end
       end
     end
   end
 
   @doc "Generate embeddings for multiple texts using the configured provider."
   def generate(texts, opts \\ []) do
+    with {:ok, provider, merged_opts} <- resolve_provider(opts) do
+      provider.generate(texts, merged_opts)
+    end
+  end
+
+  defp resolve_provider(opts) do
     provider = Mneme.Config.embedding_provider()
-    merged_opts = Keyword.merge(Mneme.Config.embedding_opts(), opts)
-    provider.generate(texts, merged_opts)
+
+    if provider == nil do
+      {:error, :no_embedding_provider}
+    else
+      config_opts = Mneme.Config.embedding_opts()
+
+      case config_opts do
+        [disabled: true] ->
+          {:error, :embedding_disabled}
+
+        _ ->
+          {:ok, provider, Keyword.merge(config_opts, opts)}
+      end
+    end
   end
 end

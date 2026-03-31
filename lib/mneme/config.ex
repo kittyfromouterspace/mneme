@@ -3,7 +3,42 @@ defmodule Mneme.Config do
   Runtime configuration resolution for Mneme.
 
   The host application provides all configuration via `config :mneme`.
-  Mneme never starts its own Repo or makes assumptions about the host app.
+  Mneme never starts its own Repo, stores API keys, or makes assumptions
+  about the host app's secret management.
+
+  ## Credentials Resolution
+
+  Instead of static API keys, Mneme uses a `:credentials_fn` callback that
+  the host app provides. This function is called at runtime to fetch
+  credentials from whatever secret system the host app uses.
+
+  ## Example Configuration
+
+      # Homunculus (uses SecretStore)
+      config :mneme,
+        repo: Homunculus.Repo,
+        embedding: [
+          provider: Mneme.Embedding.OpenRouter,
+          credentials_fn: fn ->
+            case Homunculus.SecretStore.get("openrouter", "api_key") do
+              {:ok, key} -> %{api_key: key, model: "google/text-embedding-004", dimensions: 768}
+              _ -> :disabled
+            end
+          end
+        ]
+
+      # Strategic Change Engine (uses LlmCredential)
+      config :mneme,
+        repo: StrategicChangeEngine.Repo,
+        embedding: [
+          provider: Mneme.Embedding.OpenRouter,
+          credentials_fn: fn ->
+            case StrategicChangeEngine.Admin.LlmCredential.active_for_provider(:openrouter, authorize?: false) do
+              {:ok, cred} -> %{api_key: cred.api_key, model: "google/text-embedding-004", dimensions: 768}
+              _ -> :disabled
+            end
+          end
+        ]
   """
 
   @doc "The Ecto Repo module provided by the host app."
@@ -22,10 +57,45 @@ defmodule Mneme.Config do
     Keyword.get(config, :provider)
   end
 
-  @doc "Embedding provider options."
-  def embedding_opts do
+  @doc """
+  Resolve embedding credentials at runtime via the host app's secret system.
+
+  Calls the `:credentials_fn` from config. Returns a map with at minimum
+  `:api_key`, plus optional `:model`, `:base_url`, `:dimensions`.
+
+  Returns `:disabled` if no credentials are available.
+  """
+  def embedding_credentials do
     config = Application.get_env(:mneme, :embedding, [])
-    Keyword.drop(config, [:provider])
+
+    case Keyword.get(config, :credentials_fn) do
+      fun when is_function(fun, 0) ->
+        fun.()
+
+      nil ->
+        # Fallback to static config for backwards compatibility
+        static_opts = Keyword.drop(config, [:provider, :credentials_fn])
+
+        case Keyword.get(static_opts, :api_key) do
+          nil -> :disabled
+          key -> Map.new(static_opts) |> Map.put(:api_key, key)
+        end
+    end
+  end
+
+  @doc """
+  Build embedding opts by merging resolved credentials with static config.
+
+  This is what gets passed to the embedding provider's generate/2 callback.
+  """
+  def embedding_opts do
+    case embedding_credentials() do
+      :disabled ->
+        [disabled: true]
+
+      %{} = creds ->
+        creds |> Map.to_list()
+    end
   end
 
   @doc "Extraction provider module (implements Mneme.ExtractionProvider)."
@@ -34,16 +104,27 @@ defmodule Mneme.Config do
     Keyword.get(config, :provider, Mneme.Extraction.LlmJson)
   end
 
-  @doc "Extraction provider options."
+  @doc "Extraction provider options (includes llm_fn from host app)."
   def extraction_opts do
     config = Application.get_env(:mneme, :extraction, [])
     Keyword.drop(config, [:provider])
   end
 
-  @doc "Embedding vector dimensions (must match provider)."
+  @doc "Embedding vector dimensions (resolved from credentials or static config)."
   def dimensions do
-    config = Application.get_env(:mneme, :embedding, [])
-    Keyword.get(config, :dimensions, 768)
+    case embedding_credentials() do
+      %{dimensions: d} when is_integer(d) ->
+        d
+
+      _ ->
+        config = Application.get_env(:mneme, :embedding, [])
+        Keyword.get(config, :dimensions, 768)
+    end
+  end
+
+  @doc "Check if embedding is available."
+  def embedding_enabled? do
+    embedding_provider() != nil && embedding_credentials() != :disabled
   end
 
   @doc "TaskSupervisor name for async operations."
