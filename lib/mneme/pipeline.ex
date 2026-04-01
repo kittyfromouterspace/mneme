@@ -48,7 +48,12 @@ defmodule Mneme.Pipeline do
              {:ok, chunks} <- do_chunk(document, pipeline_opts, repo),
              {:ok, run} <- update_run(run, "embedding", %{chunks_created: length(chunks)}, repo),
              {:ok, chunks} <- do_embed_chunks(chunks),
-             {:ok, run} <- update_run(run, "extracting", %{chunks_embedded: length(chunks)}, repo),
+             embedding_usage = collect_embedding_usage(),
+             {:ok, run} <-
+               update_run(run, "extracting", %{
+                 chunks_embedded: length(chunks),
+                 embedding_tokens: embedding_usage[:tokens_used] || 0
+               }, repo),
              {:ok, extraction} <- do_extract(chunks, pipeline_opts),
              {:ok, run} <-
                update_run(
@@ -61,7 +66,15 @@ defmodule Mneme.Pipeline do
                  repo
                ),
              {:ok, _} <- do_embed_entities(extraction.entities),
-             {:ok, _run} <- update_run(run, "complete", repo) do
+             {:ok, _run} <-
+               update_run(run, "complete", %{
+                 tokens_used: embedding_usage[:tokens_used] || 0
+               }, repo) do
+          # Update run with final token count
+          run
+          |> PipelineRun.changeset(%{tokens_used: embedding_usage[:tokens_used] || 0})
+          |> repo.update()
+
           # Mark document as ready
           document
           |> Ecto.Changeset.change(%{status: "ready"})
@@ -139,6 +152,9 @@ defmodule Mneme.Pipeline do
   end
 
   defp do_embed_chunks(chunks) do
+    # Clear any previous usage data
+    Process.delete(:mneme_last_embedding_usage)
+
     case Embedder.embed_chunks(chunks) do
       {:ok, _} = result ->
         result
@@ -147,6 +163,10 @@ defmodule Mneme.Pipeline do
         Logger.warning("Mneme.Pipeline: chunk embedding failed, continuing: #{inspect(reason)}")
         {:ok, chunks}
     end
+  end
+
+  defp collect_embedding_usage do
+    Process.get(:mneme_last_embedding_usage, %{tokens_used: 0})
   end
 
   defp do_extract(chunks, opts) do

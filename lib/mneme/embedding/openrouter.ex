@@ -27,12 +27,25 @@ defmodule Mneme.Embedding.OpenRouter do
 
     texts
     |> Enum.chunk_every(@batch_size)
-    |> Enum.reduce_while({:ok, []}, fn batch, {:ok, acc} ->
+    |> Enum.reduce_while({:ok, [], %{tokens_used: 0}}, fn batch, {:ok, acc, usage_acc} ->
       case generate_batch(batch, api_key, model, base_url) do
-        {:ok, embeddings} -> {:cont, {:ok, acc ++ embeddings}}
-        {:error, reason} -> {:halt, {:error, reason}}
+        {:ok, embeddings, usage} ->
+          merged_usage = %{tokens_used: usage_acc.tokens_used + (usage[:tokens_used] || 0)}
+          {:cont, {:ok, acc ++ embeddings, merged_usage}}
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
       end
     end)
+    |> case do
+      {:ok, embeddings, usage} ->
+        # Store usage in process dict for pipeline to pick up
+        Process.put(:mneme_last_embedding_usage, usage)
+        {:ok, embeddings}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   @impl true
@@ -55,13 +68,14 @@ defmodule Mneme.Embedding.OpenRouter do
     body = %{"input" => texts, "model" => model}
 
     case Req.post(url, json: body, headers: headers, receive_timeout: 30_000) do
-      {:ok, %{status: 200, body: %{"data" => data}}} ->
+      {:ok, %{status: 200, body: %{"data" => data} = resp_body}} ->
         embeddings =
           data
           |> Enum.sort_by(& &1["index"])
           |> Enum.map(& &1["embedding"])
 
-        {:ok, embeddings}
+        usage = extract_usage(resp_body)
+        {:ok, embeddings, usage}
 
       {:ok, %{status: status, body: body}} ->
         Logger.error("OpenRouter embedding error (#{status}): #{inspect(body)}")
@@ -72,4 +86,12 @@ defmodule Mneme.Embedding.OpenRouter do
         {:error, reason}
     end
   end
+
+  defp extract_usage(%{"usage" => %{"total_tokens" => tokens}}) when is_integer(tokens),
+    do: %{tokens_used: tokens}
+
+  defp extract_usage(%{"usage" => %{"prompt_tokens" => tokens}}) when is_integer(tokens),
+    do: %{tokens_used: tokens}
+
+  defp extract_usage(_), do: %{tokens_used: 0}
 end

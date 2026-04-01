@@ -36,6 +36,7 @@ defmodule Mneme do
   """
 
   alias Mneme.{Pipeline, Search}
+  alias Mneme.Search.Completion
 
   # ── Full Pipeline API (Tier 1) ───────────────────────────────────────
 
@@ -129,6 +130,25 @@ defmodule Mneme do
   @doc "Graph neighborhood expansion from an entity or entry."
   def search_graph(entity_id, opts \\ []) do
     Search.Graph.neighborhood(entity_id, opts)
+  end
+
+  # ── Completion ──────────────────────────────────────────────────────
+
+  @doc """
+  Answer a question using memory search as LLM context.
+
+  Requires an `:llm_fn` callback that accepts a list of message maps
+  and returns `{:ok, answer_string}` or `{:error, reason}`.
+
+  ## Options
+  - `:llm_fn` (required) — `fn messages -> {:ok, string} | {:error, reason} end`
+  - `:system_prompt` — Override the default system prompt
+  - `:owner_id`, `:scope_id` — Scope the search
+  - `:limit` — Max chunks (default: 10)
+  - `:hops` — Graph depth (default: 2)
+  """
+  def complete(question, opts \\ []) do
+    Completion.complete(question, opts)
   end
 
   # ── Context Formatting ──────────────────────────────────────────────
