@@ -50,10 +50,15 @@ defmodule Mneme.Pipeline do
              {:ok, chunks} <- do_embed_chunks(chunks),
              embedding_usage = collect_embedding_usage(),
              {:ok, run} <-
-               update_run(run, "extracting", %{
-                 chunks_embedded: length(chunks),
-                 embedding_tokens: embedding_usage[:tokens_used] || 0
-               }, repo),
+               update_run(
+                 run,
+                 "extracting",
+                 %{
+                   chunks_embedded: length(chunks),
+                   embedding_tokens: embedding_usage[:tokens_used] || 0
+                 },
+                 repo
+               ),
              {:ok, extraction} <- do_extract(chunks, pipeline_opts),
              {:ok, run} <-
                update_run(
@@ -67,9 +72,14 @@ defmodule Mneme.Pipeline do
                ),
              {:ok, _} <- do_embed_entities(extraction.entities),
              {:ok, _run} <-
-               update_run(run, "complete", %{
-                 tokens_used: embedding_usage[:tokens_used] || 0
-               }, repo) do
+               update_run(
+                 run,
+                 "complete",
+                 %{
+                   tokens_used: embedding_usage[:tokens_used] || 0
+                 },
+                 repo
+               ) do
           # Update run with final token count
           run
           |> PipelineRun.changeset(%{tokens_used: embedding_usage[:tokens_used] || 0})

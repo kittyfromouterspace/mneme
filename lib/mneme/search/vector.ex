@@ -26,7 +26,7 @@ defmodule Mneme.Search.Vector do
     result =
       case Embedder.embed_query(query_text) do
         {:ok, query_embedding} ->
-          embedding_str = "[#{Enum.join(query_embedding, ",")}]"
+          embedding_str = "[#{Enum.map_join(query_embedding, ",", &Float.to_string/1)}]"
 
           results =
             []
@@ -63,7 +63,7 @@ defmodule Mneme.Search.Vector do
 
     case Embedder.embed_query(query_text) do
       {:ok, embedding} ->
-        embedding_str = "[#{Enum.join(embedding, ",")}]"
+        embedding_str = "[#{Enum.map_join(embedding, ",", &Float.to_string/1)}]"
         do_search_chunks(embedding_str, owner_id, limit, min_score)
 
       {:error, reason} ->
@@ -78,7 +78,7 @@ defmodule Mneme.Search.Vector do
 
     case Embedder.embed_query(query_text) do
       {:ok, embedding} ->
-        embedding_str = "[#{Enum.join(embedding, ",")}]"
+        embedding_str = "[#{Enum.map_join(embedding, ",", &Float.to_string/1)}]"
         do_search_entries(embedding_str, scope_id, limit, min_score)
 
       {:error, reason} ->
@@ -92,7 +92,7 @@ defmodule Mneme.Search.Vector do
 
     case Embedder.embed_query(query_text) do
       {:ok, embedding} ->
-        embedding_str = "[#{Enum.join(embedding, ",")}]"
+        embedding_str = "[#{Enum.map_join(embedding, ",", &Float.to_string/1)}]"
         do_search_entities(embedding_str, owner_id, limit)
 
       {:error, reason} ->

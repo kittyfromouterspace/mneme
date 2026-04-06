@@ -1,8 +1,4 @@
 defmodule MnemeTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
   doctest Mneme
-
-  test "greets the world" do
-    assert Mneme.hello() == :world
-  end
 end

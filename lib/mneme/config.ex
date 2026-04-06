@@ -73,12 +73,17 @@ defmodule Mneme.Config do
         fun.()
 
       nil ->
-        # Fallback to static config for backwards compatibility
         static_opts = Keyword.drop(config, [:provider, :credentials_fn])
 
-        case Keyword.get(static_opts, :api_key) do
-          nil -> :disabled
-          key -> Map.new(static_opts) |> Map.put(:api_key, key)
+        cond do
+          Keyword.get(static_opts, :api_key) ->
+            Map.new(static_opts) |> Map.put(:api_key, Keyword.get(static_opts, :api_key))
+
+          Keyword.get(static_opts, :mock) == true ->
+            Map.new(static_opts)
+
+          true ->
+            :disabled
         end
     end
   end
