@@ -59,7 +59,7 @@ defmodule Mneme.SchemaIndex do
   end
 
   defp build_tag_frequency(rows) do
-    Enum.reduce(rows, %{}, fn [content, tags_json], acc ->
+    Enum.reduce(rows, %{}, fn [_content, tags_json], acc ->
       tags =
         case tags_json do
           nil ->

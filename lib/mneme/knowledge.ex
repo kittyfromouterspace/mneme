@@ -8,6 +8,7 @@ defmodule Mneme.Knowledge do
   alias Mneme.Config
   alias Mneme.Schema.{Entry, Edge}
   alias Mneme.Pipeline.Embedder
+  alias Mneme.{Valence, SchemaFit, Strength}
 
   require Logger
 
@@ -24,12 +25,17 @@ defmodule Mneme.Knowledge do
     Mneme.Telemetry.span([:mneme, :remember], metadata, fn ->
       repo = Config.repo()
 
-      valence = Mneme.Valence.infer(opts)
-      half_life = Keyword.get(opts, :half_life_days) || 7.0
+      valence = Valence.infer(opts)
+      tags = Keyword.get(opts, :tags, [])
+      scope_id = Keyword.get(opts, :scope_id)
+
+      base_half_life = Keyword.get(opts, :half_life_days) || 7.0
+      schema_fit = SchemaFit.compute(content, tags, scope_id)
+      adjusted_half_life = Strength.adjust_for_schema_fit(base_half_life, schema_fit)
 
       attrs = %{
         content: content,
-        scope_id: Keyword.get(opts, :scope_id),
+        scope_id: scope_id,
         owner_id: Keyword.get(opts, :owner_id),
         entry_type: Keyword.get(opts, :entry_type, "note"),
         summary: Keyword.get(opts, :summary),
@@ -37,10 +43,10 @@ defmodule Mneme.Knowledge do
         source_id: Keyword.get(opts, :source_id),
         metadata: Keyword.get(opts, :metadata, %{}),
         confidence: Keyword.get(opts, :confidence, 1.0),
-        half_life_days: half_life,
+        half_life_days: adjusted_half_life,
         pinned: Keyword.get(opts, :pinned, false),
         emotional_valence: Atom.to_string(valence),
-        schema_fit: Keyword.get(opts, :schema_fit, 0.5),
+        schema_fit: schema_fit,
         confidence_state: "active"
       }
 

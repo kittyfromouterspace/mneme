@@ -30,6 +30,11 @@ defmodule Mneme.WorkingMemory.Server do
     GenServer.call(pid, :read)
   end
 
+  @doc "Clear all entries from working memory."
+  def clear(pid) do
+    GenServer.call(pid, :clear)
+  end
+
   @doc "Get the scope_id for this server."
   def scope_id(pid) do
     GenServer.call(pid, :scope_id)

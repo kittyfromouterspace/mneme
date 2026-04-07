@@ -3,7 +3,7 @@ defmodule Mneme.Search.Vector do
   Semantic similarity search over chunks and entries using pgvector.
   """
 
-  alias Mneme.{Config, Pipeline.Embedder, RetrievalCounter, OutcomeTracker}
+  alias Mneme.{Config, Pipeline.Embedder, RetrievalCounter, OutcomeTracker, Confidence}
 
   require Logger
 
@@ -220,6 +220,7 @@ defmodule Mneme.Search.Vector do
   defp bump_retrieval(results) do
     ids = results |> Enum.map(& &1["id"]) |> Enum.reject(&is_nil/1)
     RetrievalCounter.bump_many(ids)
+    Confidence.wake_up_stale_entries(ids)
   end
 
   defp track_for_outcome(scope_id, results) do
