@@ -3,7 +3,7 @@ defmodule Mneme.Search.Vector do
   Semantic similarity search over chunks and entries using pgvector.
   """
 
-  alias Mneme.{Config, Pipeline.Embedder}
+  alias Mneme.{Config, Pipeline.Embedder, RetrievalCounter, OutcomeTracker}
 
   require Logger
 
@@ -167,6 +167,8 @@ defmodule Mneme.Search.Vector do
     SELECT
       me.id, me.content, me.summary, me.entry_type, me.source,
       me.metadata, me.confidence, me.inserted_at,
+      me.half_life_days, me.pinned, me.emotional_valence, me.access_count,
+      me.last_accessed_at,
       (1 - (me.embedding <=> $1::text::vector)) AS score
     FROM mneme_entries me
     WHERE me.scope_id = $2
@@ -180,8 +182,8 @@ defmodule Mneme.Search.Vector do
     case repo.query(sql, [embedding_str, uuid_to_bin(scope_id), min_score, limit]) do
       {:ok, %{rows: rows, columns: columns}} ->
         results = Enum.map(rows, fn row -> row_to_map(columns, row) end)
-        # Bump access counts async
-        bump_access(results, repo)
+        bump_retrieval(results)
+        track_for_outcome(scope_id, results)
         {:ok, results}
 
       {:error, reason} ->
@@ -215,28 +217,14 @@ defmodule Mneme.Search.Vector do
     end
   end
 
-  defp bump_access(results, repo) do
-    ids =
-      results
-      |> Enum.map(& &1["id"])
-      |> Enum.reject(&is_nil/1)
+  defp bump_retrieval(results) do
+    ids = results |> Enum.map(& &1["id"]) |> Enum.reject(&is_nil/1)
+    RetrievalCounter.bump_many(ids)
+  end
 
-    if ids != [] do
-      Task.Supervisor.start_child(
-        Config.task_supervisor(),
-        fn ->
-          now = DateTime.utc_now()
-
-          repo.query(
-            "UPDATE mneme_entries SET access_count = access_count + 1, last_accessed_at = $1 WHERE id = ANY($2)",
-            [now, ids]
-          )
-        end,
-        restart: :temporary
-      )
-    end
-  rescue
-    _ -> :ok
+  defp track_for_outcome(scope_id, results) do
+    ids = results |> Enum.map(& &1["id"]) |> Enum.reject(&is_nil/1)
+    if ids != [], do: OutcomeTracker.set(scope_id, ids)
   end
 
   defp uuid_to_bin(id) when is_binary(id) do

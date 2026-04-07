@@ -24,6 +24,9 @@ defmodule Mneme.Knowledge do
     Mneme.Telemetry.span([:mneme, :remember], metadata, fn ->
       repo = Config.repo()
 
+      valence = Mneme.Valence.infer(opts)
+      half_life = Keyword.get(opts, :half_life_days) || 7.0
+
       attrs = %{
         content: content,
         scope_id: Keyword.get(opts, :scope_id),
@@ -33,7 +36,12 @@ defmodule Mneme.Knowledge do
         source: Keyword.get(opts, :source, "system"),
         source_id: Keyword.get(opts, :source_id),
         metadata: Keyword.get(opts, :metadata, %{}),
-        confidence: Keyword.get(opts, :confidence, 1.0)
+        confidence: Keyword.get(opts, :confidence, 1.0),
+        half_life_days: half_life,
+        pinned: Keyword.get(opts, :pinned, false),
+        emotional_valence: Atom.to_string(valence),
+        schema_fit: Keyword.get(opts, :schema_fit, 0.5),
+        confidence_state: "active"
       }
 
       case %Entry{} |> Entry.changeset(attrs) |> repo.insert() do

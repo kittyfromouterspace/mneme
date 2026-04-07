@@ -22,6 +22,12 @@ defmodule Mneme.Schema.Entry do
     field(:access_count, :integer, default: 0)
     field(:last_accessed_at, :utc_datetime_usec)
     field(:confidence, :float, default: 1.0)
+    field(:half_life_days, :float, default: 7.0)
+    field(:pinned, :boolean, default: false)
+    field(:emotional_valence, :string, default: "neutral")
+    field(:schema_fit, :float, default: 0.5)
+    field(:outcome_score, :integer)
+    field(:confidence_state, :string, default: "active")
 
     timestamps()
   end
@@ -44,12 +50,20 @@ defmodule Mneme.Schema.Entry do
       :metadata,
       :access_count,
       :last_accessed_at,
-      :confidence
+      :confidence,
+      :half_life_days,
+      :pinned,
+      :emotional_valence,
+      :schema_fit,
+      :outcome_score,
+      :confidence_state
     ])
     |> validate_required([:content])
     |> validate_inclusion(:entry_type, @entry_types)
     |> validate_inclusion(:source, ~w(agent system user))
     |> validate_number(:confidence, greater_than_or_equal_to: 0.0, less_than_or_equal_to: 1.0)
+    |> validate_inclusion(:emotional_valence, ~w(neutral positive negative critical))
+    |> validate_inclusion(:confidence_state, ~w(active stale verified))
   end
 
   def bump_access_changeset(entry) do
