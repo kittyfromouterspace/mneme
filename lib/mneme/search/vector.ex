@@ -3,7 +3,15 @@ defmodule Mneme.Search.Vector do
   Semantic similarity search over chunks and entries using pgvector.
   """
 
-  alias Mneme.{Config, Pipeline.Embedder, RetrievalCounter, OutcomeTracker, Confidence}
+  alias Mneme.{
+    Config,
+    Pipeline.Embedder,
+    RetrievalCounter,
+    OutcomeTracker,
+    Confidence,
+    Context.Detector,
+    Search.ContextBooster
+  }
 
   require Logger
 
@@ -168,7 +176,7 @@ defmodule Mneme.Search.Vector do
       me.id, me.content, me.summary, me.entry_type, me.source,
       me.metadata, me.confidence, me.inserted_at,
       me.half_life_days, me.pinned, me.emotional_valence, me.access_count,
-      me.last_accessed_at,
+      me.last_accessed_at, me.context_hints,
       (1 - (me.embedding <=> $1::text::vector)) AS score
     FROM mneme_entries me
     WHERE me.scope_id = $2
@@ -182,6 +190,7 @@ defmodule Mneme.Search.Vector do
     case repo.query(sql, [embedding_str, uuid_to_bin(scope_id), min_score, limit]) do
       {:ok, %{rows: rows, columns: columns}} ->
         results = Enum.map(rows, fn row -> row_to_map(columns, row) end)
+        results = add_context_boost(results)
         bump_retrieval(results)
         track_for_outcome(scope_id, results)
         {:ok, results}
@@ -226,6 +235,20 @@ defmodule Mneme.Search.Vector do
   defp track_for_outcome(scope_id, results) do
     ids = results |> Enum.map(& &1["id"]) |> Enum.reject(&is_nil/1)
     if ids != [], do: OutcomeTracker.set(scope_id, ids)
+  end
+
+  defp add_context_boost(results) do
+    current = Detector.detect()
+
+    if map_size(current) == 0 do
+      results
+    else
+      # Parse context_hints and apply boost
+      results
+      |> Enum.map(fn entry ->
+        ContextBooster.apply_boost([entry], current) |> hd()
+      end)
+    end
   end
 
   defp uuid_to_bin(id) when is_binary(id) do

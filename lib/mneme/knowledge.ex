@@ -8,12 +8,15 @@ defmodule Mneme.Knowledge do
   alias Mneme.Config
   alias Mneme.Schema.{Entry, Edge}
   alias Mneme.Pipeline.Embedder
-  alias Mneme.{Valence, SchemaFit, Strength}
+  alias Mneme.{Valence, SchemaFit, Strength, Context.Detector}
 
   require Logger
 
   @doc """
   Store a knowledge entry with auto-embedding.
+
+  Automatically captures current context (git repo, path, OS) unless
+  explicitly provided via `:context_hints` option.
   """
   def remember(content, opts \\ []) do
     metadata = %{
@@ -28,6 +31,14 @@ defmodule Mneme.Knowledge do
       valence = Valence.infer(opts)
       tags = Keyword.get(opts, :tags, [])
       scope_id = Keyword.get(opts, :scope_id)
+
+      # Auto-capture context unless explicitly provided
+      context_hints =
+        if opts[:context_hints] do
+          opts[:context_hints]
+        else
+          Detector.detect()
+        end
 
       base_half_life = Keyword.get(opts, :half_life_days) || 7.0
       schema_fit = SchemaFit.compute(content, tags, scope_id)
@@ -47,7 +58,8 @@ defmodule Mneme.Knowledge do
         pinned: Keyword.get(opts, :pinned, false),
         emotional_valence: Atom.to_string(valence),
         schema_fit: schema_fit,
-        confidence_state: "active"
+        confidence_state: "active",
+        context_hints: context_hints
       }
 
       case %Entry{} |> Entry.changeset(attrs) |> repo.insert() do

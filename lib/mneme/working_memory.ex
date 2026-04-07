@@ -55,6 +55,46 @@ defmodule Mneme.WorkingMemory do
   @doc "Semantic alias for clear, used at session boundaries."
   def flush(scope_id), do: clear(scope_id)
 
+  @doc """
+  Load handoff into working memory on session resume.
+
+  Pushes handoff items as high-importance entries so the session
+  can immediately continue from where it left off.
+  """
+  def load_handoff(scope_id) do
+    alias Mneme.Telemetry
+
+    case Mneme.Handoff.get(scope_id) do
+      {:ok, handoff} when not is_nil(handoff) ->
+        # Push handoff items to working memory
+        push(scope_id, "📋 #{handoff.what}", importance: 0.95)
+
+        Enum.each(handoff.next, fn step ->
+          push(scope_id, "→ #{step}", importance: 0.8)
+        end)
+
+        Enum.each(handoff.artifacts, fn artifact ->
+          push(scope_id, "📎 #{artifact}", importance: 0.7)
+        end)
+
+        Telemetry.event(
+          [:mneme, :handoff, :load, :stop],
+          %{next_count: length(handoff.next), artifacts_count: length(handoff.artifacts)},
+          %{scope_id: scope_id}
+        )
+
+        {:ok,
+         %{
+           what: handoff.what,
+           next_count: length(handoff.next),
+           artifacts_count: length(handoff.artifacts)
+         }}
+
+      _ ->
+        {:ok, nil}
+    end
+  end
+
   @doc "List all active scope IDs."
   def active_scopes do
     DynamicSupervisor.which_children(working_memory_supervisor())

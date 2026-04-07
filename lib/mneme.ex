@@ -161,6 +161,63 @@ defmodule Mneme do
   # ── Maintenance ─────────────────────────────────────────────────────
 
   @doc """
+  Run the learning pipeline to automatically extract knowledge from external sources.
+
+  ## Options
+  - `:scope_id` - Required. The scope to learn for
+  - `:sources` - List of sources (default: all enabled)
+  - `:since` - Learn from events since (default: "7 days ago")
+  - `:dry_run` - Preview without creating entries
+
+  ## Example
+      {:ok, result} = Mneme.learn(scope_id: workspace_id)
+  """
+  def learn(opts \\ []) do
+    Mneme.Learning.Pipeline.run(opts)
+  end
+
+  @doc """
+  Run active invalidation to detect breaking changes and weaken related memories.
+
+  ## Options
+  - `:scope_id` - Required. The scope to invalidate memories for
+  - `:days` - Number of days to scan (default: 7)
+
+  ## Example
+      {:ok, result} = Mneme.invalidate(scope_id: workspace_id)
+  """
+  def invalidate(opts \\ []) do
+    Mneme.Invalidation.run_from_git(opts)
+  end
+
+  @doc """
+  Create a session handoff for continuing work across sessions.
+
+  ## Options
+  - `:scope_id` - Required. The scope
+  - `:what` - What you were working on
+  - `:next` - List of next steps
+  - `:artifacts` - Files/links to continue with
+  - `:blockers` - What's blocking progress
+
+  ## Example
+      Mneme.handoff(workspace_id,
+        what: "Implementing user auth",
+        next: ["Add login controller", "Create session middleware"]
+      )
+  """
+  def handoff(scope_id, opts \\ []) do
+    Mneme.Handoff.create(scope_id, opts)
+  end
+
+  @doc """
+  Get the most recent session handoff.
+  """
+  def get_handoff(scope_id) do
+    Mneme.Handoff.get(scope_id)
+  end
+
+  @doc """
   Archive stale entries based on access patterns.
 
   Default: entries not accessed in 90 days with < 3 accesses.

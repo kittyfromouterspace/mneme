@@ -31,6 +31,27 @@ defmodule Mneme.Telemetry do
   ### Maintenance
   - `[:mneme, :decay, :stop]` — Decay pass completed
 
+  ### Learning
+  - `[:mneme, :learning, :start]` — Learning pipeline started
+  - `[:mneme, :learning, :stop]` — Learning pipeline completed
+  - `[:mneme, :learn, :source, :stop]` — Single learner completed
+
+  ### Context
+  - `[:mneme, :context, :detect, :stop]` — Context detection completed
+
+  ### Invalidation
+  - `[:mneme, :invalidation, :start]` — Invalidation started
+  - `[:mneme, :invalidation, :stop]` — Invalidation completed
+  - `[:mneme, :invalidate, :stop]` — Single pattern invalidation completed
+
+  ### Handoffs
+  - `[:mneme, :handoff, :create, :stop]` — Handoff created
+  - `[:mneme, :handoff, :get, :stop]` — Handoff retrieved
+  - `[:mneme, :handoff, :load, :stop]` — Handoff loaded into working memory
+
+  ### Mipmaps
+  - `[:mneme, :mipmap, :generate, :stop]` — Mipmap generation completed
+
   All `:stop` events include `%{duration: native_time}` in measurements.
   All events include relevant metadata (scope_id, owner_id, tier, etc.).
   """

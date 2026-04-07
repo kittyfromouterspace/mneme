@@ -28,6 +28,7 @@ defmodule Mneme.Schema.Entry do
     field(:schema_fit, :float, default: 0.5)
     field(:outcome_score, :integer)
     field(:confidence_state, :string, default: "active")
+    field(:context_hints, :map, default: %{})
 
     timestamps()
   end
@@ -56,7 +57,8 @@ defmodule Mneme.Schema.Entry do
       :emotional_valence,
       :schema_fit,
       :outcome_score,
-      :confidence_state
+      :confidence_state,
+      :context_hints
     ])
     |> validate_required([:content])
     |> validate_inclusion(:entry_type, @entry_types)

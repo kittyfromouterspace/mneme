@@ -1,6 +1,8 @@
 # Mneme Enhancements — Hippo-Inspired Memory Mechanics
 
 > Based on analysis of [hippo-memory](https://github.com/hippo-memory), a biologically-inspired memory system for AI agents.
+> 
+> See [implementation-plan.md](../implementation-plan.md) for the consolidated implementation roadmap.
 
 ## Overview
 
@@ -18,6 +20,11 @@ Hippo models seven properties of the human hippocampus. Mneme already shares sev
 | 6 | Schema Acceleration | Medium | Medium | [06-schema-acceleration.md](06-schema-acceleration.md) |
 | 7 | Conflict Detection | Medium | Medium | [07-conflict-detection.md](07-conflict-detection.md) |
 | 8 | Sleep Consolidation | Low | High | [08-sleep-consolidation.md](08-sleep-consolidation.md) |
+| 9 | Context-Aware Retrieval | High | Medium | [09-context-aware-retrieval.md](09-context-aware-retrieval.md) |
+| 10 | Learning System | High | Medium | [10-learning-system.md](10-learning-system.md) |
+| 11 | Active Invalidation | High | Medium | [11-active-invalidation.md](11-active-invalidation.md) |
+| 12 | Session Handoffs | Medium | Low | [12-session-handoffs.md](12-session-handoffs.md) |
+| 13 | Context Mipmaps | Medium | Medium | [13-context-mipmaps.md](13-context-mipmaps.md) |
 
 ## What Mneme Already Has
 
