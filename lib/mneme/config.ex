@@ -123,7 +123,7 @@ defmodule Mneme.Config do
 
       _ ->
         config = Application.get_env(:mneme, :embedding, [])
-        Keyword.get(config, :dimensions, 768)
+        Keyword.get(config, :dimensions, 1536)
     end
   end
 

@@ -27,7 +27,15 @@ defmodule Mneme.EmbeddingProvider do
   @callback embed(text :: String.t(), opts :: keyword()) ::
               {:ok, [float()]} | {:error, term()}
 
-  @optional_callbacks [embed: 2]
+  @doc """
+  Identifier for the model that will produce embeddings under the
+  given opts. Used by the pipeline to record provenance alongside each
+  vector. Returns `nil` when the provider can't (or doesn't want to)
+  declare a stable id.
+  """
+  @callback model_id(opts :: keyword()) :: String.t() | nil
+
+  @optional_callbacks [embed: 2, model_id: 1]
 
   @doc "Generate embedding for a single text using the configured provider."
   def embed(text, opts \\ []) do
@@ -48,6 +56,24 @@ defmodule Mneme.EmbeddingProvider do
   def generate(texts, opts \\ []) do
     with {:ok, provider, merged_opts} <- resolve_provider(opts) do
       provider.generate(texts, merged_opts)
+    end
+  end
+
+  @doc """
+  Resolve the model id of the currently configured provider, or `nil`
+  if the provider doesn't implement `model_id/1`.
+  """
+  def model_id(opts \\ []) do
+    case resolve_provider(opts) do
+      {:ok, provider, merged_opts} ->
+        if function_exported?(provider, :model_id, 1) do
+          provider.model_id(merged_opts)
+        else
+          nil
+        end
+
+      _ ->
+        nil
     end
   end
 

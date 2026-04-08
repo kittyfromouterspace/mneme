@@ -19,6 +19,7 @@ defmodule Mneme.Schema.Entry do
     field(:source, :string, default: "system")
     field(:source_id, :string)
     field(:embedding, Pgvector.Ecto.Vector)
+    field(:embedding_model_id, :string)
     field(:metadata, :map, default: %{})
     field(:access_count, :integer, default: 0)
     field(:last_accessed_at, :utc_datetime_usec)
@@ -49,6 +50,7 @@ defmodule Mneme.Schema.Entry do
       :source,
       :source_id,
       :embedding,
+      :embedding_model_id,
       :metadata,
       :access_count,
       :last_accessed_at,

@@ -14,6 +14,7 @@ defmodule Mneme.Schema.Chunk do
     field(:sequence, :integer)
     field(:content, :string)
     field(:embedding, Pgvector.Ecto.Vector)
+    field(:embedding_model_id, :string)
     field(:token_count, :integer, default: 0)
     field(:start_offset, :integer, default: 0)
     field(:end_offset, :integer, default: 0)
@@ -32,6 +33,7 @@ defmodule Mneme.Schema.Chunk do
       :sequence,
       :content,
       :embedding,
+      :embedding_model_id,
       :token_count,
       :start_offset,
       :end_offset,

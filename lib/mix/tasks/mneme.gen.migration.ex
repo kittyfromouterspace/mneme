@@ -6,7 +6,7 @@ defmodule Mix.Tasks.Mneme.Gen.Migration do
 
   ## Options
 
-  - `--dimensions` — Embedding vector dimensions (default: 768)
+  - `--dimensions` — Embedding vector dimensions (default: 1536)
   - `--repo` — Ecto repo module (default: from config)
   """
   use Mix.Task
@@ -14,7 +14,7 @@ defmodule Mix.Tasks.Mneme.Gen.Migration do
   @impl true
   def run(args) do
     {opts, _, _} = OptionParser.parse(args, strict: [dimensions: :integer, repo: :string])
-    dimensions = Keyword.get(opts, :dimensions, 768)
+    dimensions = Keyword.get(opts, :dimensions, 1536)
 
     timestamp = Calendar.strftime(DateTime.utc_now(), "%Y%m%d%H%M%S")
     filename = "#{timestamp}_create_mneme_tables.exs"

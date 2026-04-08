@@ -21,6 +21,7 @@ defmodule Mneme.Schema.Entity do
     field(:first_seen_at, :utc_datetime_usec)
     field(:last_seen_at, :utc_datetime_usec)
     field(:embedding, Pgvector.Ecto.Vector)
+    field(:embedding_model_id, :string)
     field(:owner_id, :binary_id)
     field(:scope_id, :binary_id)
 
@@ -42,6 +43,7 @@ defmodule Mneme.Schema.Entity do
       :first_seen_at,
       :last_seen_at,
       :embedding,
+      :embedding_model_id,
       :owner_id,
       :scope_id,
       :collection_id

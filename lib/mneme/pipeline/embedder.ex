@@ -18,6 +18,7 @@ defmodule Mneme.Pipeline.Embedder do
   def embed_chunks(chunks) when is_list(chunks) do
     start_time = System.monotonic_time()
     texts = Enum.map(chunks, & &1.content)
+    model_id = EmbeddingProvider.model_id()
 
     result =
       case EmbeddingProvider.generate(texts) do
@@ -28,7 +29,7 @@ defmodule Mneme.Pipeline.Embedder do
             chunks
             |> Enum.zip(embeddings)
             |> Enum.map(fn {chunk, embedding} ->
-              store_embedding(repo, "mneme_chunks", chunk.id, embedding)
+              store_embedding(repo, "mneme_chunks", chunk.id, embedding, model_id)
               %{chunk | embedding: embedding}
             end)
 
@@ -54,12 +55,13 @@ defmodule Mneme.Pipeline.Embedder do
   def embed_entity(%Entity{} = entity) do
     start_time = System.monotonic_time()
     text = "#{entity.name}: #{entity.description || ""}"
+    model_id = EmbeddingProvider.model_id()
 
     result =
       case EmbeddingProvider.embed(text) do
         {:ok, embedding} ->
           repo = Config.repo()
-          store_embedding(repo, "mneme_entities", entity.id, embedding)
+          store_embedding(repo, "mneme_entities", entity.id, embedding, model_id)
           {:ok, %{entity | embedding: embedding}}
 
         {:error, reason} ->
@@ -87,11 +89,12 @@ defmodule Mneme.Pipeline.Embedder do
       Config.task_supervisor(),
       fn ->
         start_time = System.monotonic_time()
+        model_id = EmbeddingProvider.model_id()
 
         result =
           case EmbeddingProvider.embed(content) do
             {:ok, embedding} ->
-              store_embedding(Config.repo(), "mneme_entries", entry_id, embedding)
+              store_embedding(Config.repo(), "mneme_entries", entry_id, embedding, model_id)
 
             {:error, reason} ->
               Logger.warning("Mneme.Embedder: entry embedding failed for #{entry_id}: #{inspect(reason)}")
@@ -132,16 +135,26 @@ defmodule Mneme.Pipeline.Embedder do
     result
   end
 
-  defp store_embedding(repo, table, id, embedding) do
+  defp store_embedding(repo, table, id, embedding, model_id) do
     pgvec = Pgvector.new(embedding)
-    query = "UPDATE #{table} SET embedding = $1 WHERE id = $2"
+    id_bin = uuid_to_binary(id)
+    query = "UPDATE #{table} SET embedding = $1, embedding_model_id = $2 WHERE id = $3"
 
-    case repo.query(query, [pgvec, id]) do
+    case repo.query(query, [pgvec, model_id, id_bin]) do
       {:ok, _} ->
         :ok
 
       {:error, reason} ->
         Logger.warning("Mneme.Embedder: failed to store embedding for #{id}: #{inspect(reason)}")
+    end
+  end
+
+  defp uuid_to_binary(id) when is_binary(id) and byte_size(id) == 16, do: id
+
+  defp uuid_to_binary(id) when is_binary(id) do
+    case Ecto.UUID.dump(id) do
+      {:ok, bin} -> bin
+      :error -> id
     end
   end
 end

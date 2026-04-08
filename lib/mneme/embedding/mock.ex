@@ -2,8 +2,11 @@ defmodule Mneme.Embedding.Mock do
   @moduledoc false
   @behaviour Mneme.EmbeddingProvider
 
+  @dimensions 1536
+  @model_id "mock-1536"
+
   @impl true
-  def dimensions(_opts), do: 768
+  def dimensions(_opts), do: @dimensions
 
   @impl true
   def generate(texts, _opts) when is_list(texts) do
@@ -16,13 +19,16 @@ defmodule Mneme.Embedding.Mock do
     {:ok, mock_embedding(text)}
   end
 
+  @impl true
+  def model_id(_opts), do: @model_id
+
   defp mock_embedding(text) when is_binary(text) do
     hash = :crypto.hash(:sha256, text)
     bytes = :binary.bin_to_list(hash)
 
     bytes
     |> Stream.cycle()
-    |> Stream.take(768)
+    |> Stream.take(@dimensions)
     |> Enum.map(fn b -> b / 255.0 * 2.0 - 1.0 end)
   end
 end
