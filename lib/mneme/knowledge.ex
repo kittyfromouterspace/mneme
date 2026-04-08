@@ -8,7 +8,7 @@ defmodule Mneme.Knowledge do
   alias Mneme.Config
   alias Mneme.Schema.{Entry, Edge}
   alias Mneme.Pipeline.Embedder
-  alias Mneme.{Valence, SchemaFit, Strength, Context.Detector}
+  alias Mneme.{Valence, SchemaFit, Strength, Context.Detector, Classification}
 
   require Logger
 
@@ -17,6 +17,9 @@ defmodule Mneme.Knowledge do
 
   Automatically captures current context (git repo, path, OS) unless
   explicitly provided via `:context_hints` option.
+
+  Optionally auto-classifies content using LLM-free pattern matching
+  via `Mneme.Classification`. Enable with `:auto_classify` option.
   """
   def remember(content, opts \\ []) do
     metadata = %{
@@ -40,6 +43,14 @@ defmodule Mneme.Knowledge do
           Detector.detect()
         end
 
+      # Auto-classify content using LLM-free classification
+      {entry_type, classification_confidence} =
+        if Keyword.get(opts, :auto_classify, false) do
+          Classification.classify(content, context_hints)
+        else
+          {Keyword.get(opts, :entry_type, "note"), nil}
+        end
+
       base_half_life = Keyword.get(opts, :half_life_days) || 7.0
       schema_fit = SchemaFit.compute(content, tags, scope_id)
       adjusted_half_life = Strength.adjust_for_schema_fit(base_half_life, schema_fit)
@@ -48,11 +59,12 @@ defmodule Mneme.Knowledge do
         content: content,
         scope_id: scope_id,
         owner_id: Keyword.get(opts, :owner_id),
-        entry_type: Keyword.get(opts, :entry_type, "note"),
+        entry_type: to_string(entry_type),
         summary: Keyword.get(opts, :summary),
         source: Keyword.get(opts, :source, "system"),
         source_id: Keyword.get(opts, :source_id),
-        metadata: Keyword.get(opts, :metadata, %{}),
+        metadata:
+          Keyword.get(opts, :metadata, %{}) |> maybe_add_classification(classification_confidence),
         confidence: Keyword.get(opts, :confidence, 1.0),
         half_life_days: adjusted_half_life,
         pinned: Keyword.get(opts, :pinned, false),
@@ -71,6 +83,12 @@ defmodule Mneme.Knowledge do
           {:error, changeset}
       end
     end)
+  end
+
+  defp maybe_add_classification(metadata, nil), do: metadata
+
+  defp maybe_add_classification(metadata, confidence) when is_float(confidence) do
+    Map.put(metadata, :classification_confidence, confidence)
   end
 
   @doc "Delete a knowledge entry."
@@ -140,5 +158,146 @@ defmodule Mneme.Knowledge do
         |> repo.update_all(set: [confidence: 0.1, updated_at: DateTime.utc_now()])
       end
     )
+  end
+
+  @doc """
+  Check if new content contradicts existing knowledge.
+
+  Extracts entity claims from the content and checks against
+  existing entries in the scope. Returns:
+    - `:ok` — no conflicts found
+    - `{:conflict, [conflicts]}` — list of conflicts with details
+
+  ## Example
+
+      iex> Mneme.Knowledge.check_contradiction("Kai works on auth", scope_id, owner_id)
+      {:conflict, [%{existing: "Maya works on auth", type: :attribution_conflict}]}
+  """
+  def check_contradiction(content, scope_id, owner_id) do
+    start_time = System.monotonic_time()
+    claims = Classification.extract_claims(content)
+
+    result =
+      if claims == [] do
+        :ok
+      else
+        conflicts =
+          Enum.flat_map(claims, fn claim ->
+            check_claim_against_entries(claim, scope_id, owner_id)
+          end)
+
+        if conflicts == [] do
+          :ok
+        else
+          {:conflict, conflicts}
+        end
+      end
+
+    duration = System.monotonic_time() - start_time
+
+    Mneme.Telemetry.event([:mneme, :contradiction_check, :stop], %{
+      duration: duration,
+      claims_count: length(claims),
+      has_conflicts: match?({:conflict, _}, result)
+    })
+
+    result
+  end
+
+  defp check_claim_against_entries(claim, scope_id, owner_id) do
+    repo = Config.repo()
+    entity = claim[:entity]
+
+    # Find entries mentioning this entity
+    pattern = "%#{entity}%"
+
+    entries =
+      from(e in Entry,
+        where:
+          e.scope_id == ^scope_id and
+            e.owner_id == ^owner_id and
+            e.entry_type != "archived" and
+            e.confidence > 0.3 and
+            ilike(e.content, ^pattern)
+      )
+      |> repo.all()
+
+    # Check each entry for contradictions
+    Enum.map(entries, fn entry ->
+      case detect_contradiction(claim, entry) do
+        nil -> nil
+        type -> %{existing: entry.content, type: type, claim: claim}
+      end
+    end)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp detect_contradiction(claim, entry) do
+    entity = claim[:entity]
+    entry_content = String.downcase(entry.content)
+    claim_entity = String.downcase(entity)
+
+    # Skip if entry doesn't mention the claim entity
+    unless String.contains?(entry_content, claim_entity) do
+      nil
+    else
+      claim_pred = claim[:predicate]
+      entry_content = entry.content
+
+      # Attribution conflicts: different people for same work
+      if claim_pred in [:works_on, :assigned_to] do
+        detect_attribution_conflict(claim, entry_content)
+        # Status conflicts: complete vs in-progress
+      else
+        detect_status_conflict(claim, entry_content)
+      end
+    end
+  end
+
+  defp detect_attribution_conflict(claim, entry_content) do
+    entity = claim[:entity]
+    claim_object = String.downcase(claim[:object])
+
+    # Check if entry mentions a different entity doing the same thing
+    potential_others =
+      ~w[Alice Bob Charlie Maya Kai Priya Alex Sam Jordan]
+      |> Enum.reject(&(String.downcase(&1) == String.downcase(entity)))
+
+    other_mentioned =
+      Enum.find(potential_others, fn other ->
+        String.contains?(entry_content, String.downcase(other))
+      end)
+
+    if other_mentioned && String.contains?(entry_content, String.downcase(claim_object)) do
+      :attribution_conflict
+    end
+  end
+
+  defp detect_status_conflict(claim, entry_content) do
+    claim_object = String.downcase(claim[:object])
+    entry_lower = String.downcase(entry_content)
+
+    # Check for complete/done vs in-progress
+    claim_complete? =
+      String.contains?(claim_object, "complete") ||
+        String.contains?(claim_object, "done") ||
+        String.contains?(claim_object, "finished")
+
+    entry_complete? =
+      String.contains?(entry_lower, "complete") ||
+        String.contains?(entry_lower, "done") ||
+        String.contains?(entry_lower, "finished")
+
+    entry_in_progress? =
+      String.contains?(entry_lower, "in progress") ||
+        String.contains?(entry_lower, "working on") ||
+        String.contains?(entry_lower, "assigned to")
+
+    # Conflict: claim says complete but entry says in-progress
+    cond do
+      claim_complete? && entry_in_progress? -> :status_conflict
+      entry_complete? && !claim_complete? -> :status_conflict
+      true -> nil
+    end
   end
 end

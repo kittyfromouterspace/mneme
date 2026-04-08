@@ -24,12 +24,18 @@ defmodule Mneme.Search.Vector do
   - `:limit` — Max results (default: 10)
   - `:min_score` — Minimum similarity 0.0-1.0 (default: 0.0)
   - `:tier` — `:full`, `:lightweight`, or `:both` (default: `:both`)
+  - `:filters` — Map of additional filters:
+      - `:entry_type` — Filter by entry type (e.g., :decision, :preference)
+      - `:tags` — Filter by tags (list)
+      - `:temporal` — `:recent` (last 30 days), `:archived`, or DateTime range
+      - `:confidence_min` — Minimum confidence threshold
   """
   def search(query_text, opts \\ []) do
     start_time = System.monotonic_time()
     limit = Keyword.get(opts, :limit, 10)
     min_score = Keyword.get(opts, :min_score, 0.0)
     tier = Keyword.get(opts, :tier, :both)
+    filters = Keyword.get(opts, :filters, %{})
 
     result =
       case Embedder.embed_query(query_text) do
@@ -39,7 +45,7 @@ defmodule Mneme.Search.Vector do
           results =
             []
             |> maybe_search_chunks(embedding_str, opts, limit, min_score, tier)
-            |> maybe_search_entries(embedding_str, opts, limit, min_score, tier)
+            |> maybe_search_entries(embedding_str, opts, limit, min_score, tier, filters)
 
           {:ok, results}
 
@@ -54,7 +60,11 @@ defmodule Mneme.Search.Vector do
         Mneme.Telemetry.event([:mneme, :search, :vector, :stop], %{
           duration: duration,
           result_count: length(results),
-          tier: tier
+          tier: tier,
+          filters_applied: map_size(filters) > 0,
+          has_entry_type_filter: filters[:entry_type] != nil,
+          has_temporal_filter: filters[:temporal] != nil,
+          has_confidence_filter: filters[:confidence_min] != nil
         })
 
       _ ->
@@ -83,11 +93,12 @@ defmodule Mneme.Search.Vector do
   def search_entries(query_text, scope_id, opts \\ []) do
     limit = Keyword.get(opts, :limit, 10)
     min_score = Keyword.get(opts, :min_score, 0.0)
+    filters = Keyword.get(opts, :filters, %{})
 
     case Embedder.embed_query(query_text) do
       {:ok, embedding} ->
         embedding_str = "[#{Enum.map_join(embedding, ",", &Float.to_string/1)}]"
-        do_search_entries(embedding_str, scope_id, limit, min_score)
+        do_search_entries(embedding_str, scope_id, limit, min_score, filters)
 
       {:error, reason} ->
         {:error, reason}
@@ -126,21 +137,19 @@ defmodule Mneme.Search.Vector do
 
   defp maybe_search_chunks(acc, _, _, _, _, _), do: acc
 
-  defp maybe_search_entries(acc, embedding_str, opts, limit, min_score, tier)
+  defp maybe_search_entries(acc, embedding_str, opts, limit, min_score, tier, filters)
        when tier in [:lightweight, :both] do
     case Keyword.get(opts, :scope_id) do
       nil ->
         acc
 
       scope_id ->
-        case do_search_entries(embedding_str, scope_id, limit, min_score) do
+        case do_search_entries(embedding_str, scope_id, limit, min_score, filters) do
           {:ok, results} -> acc ++ Enum.map(results, &Map.put(&1, :result_type, :entry))
           _ -> acc
         end
     end
   end
-
-  defp maybe_search_entries(acc, _, _, _, _, _), do: acc
 
   defp do_search_chunks(embedding_str, owner_id, limit, min_score) do
     repo = Config.repo()
@@ -168,8 +177,11 @@ defmodule Mneme.Search.Vector do
     end
   end
 
-  defp do_search_entries(embedding_str, scope_id, limit, min_score) do
+  defp do_search_entries(embedding_str, scope_id, limit, min_score, filters) do
     repo = Config.repo()
+
+    # Build dynamic filter conditions
+    {filter_sql, filter_params} = build_entry_filters(filters, scope_id)
 
     sql = """
     SELECT
@@ -183,11 +195,16 @@ defmodule Mneme.Search.Vector do
       AND me.embedding IS NOT NULL
       AND me.entry_type != 'archived'
       AND (1 - (me.embedding <=> $1::text::vector)) >= $3
+      #{filter_sql}
     ORDER BY me.embedding <=> $1::text::vector
     LIMIT $4
     """
 
-    case repo.query(sql, [embedding_str, uuid_to_bin(scope_id), min_score, limit]) do
+    # Adjust params: embedding_str, scope_id, min_score are positional
+    # filter_params are appended
+    params = [embedding_str, uuid_to_bin(scope_id), min_score, limit | filter_params]
+
+    case repo.query(sql, params) do
       {:ok, %{rows: rows, columns: columns}} ->
         results = Enum.map(rows, fn row -> row_to_map(columns, row) end)
         results = add_context_boost(results)
@@ -199,6 +216,48 @@ defmodule Mneme.Search.Vector do
         Logger.error("Mneme vector search (entries) failed: #{inspect(reason)}")
         {:error, reason}
     end
+  end
+
+  defp build_entry_filters(filters, _scope_id) when filters == %{} or filters == nil do
+    {"", []}
+  end
+
+  defp build_entry_filters(filters, _scope_id) do
+    conditions_and_params =
+      []
+      |> add_entry_type_filter(filters[:entry_type])
+      |> add_confidence_filter(filters[:confidence_min])
+      |> add_temporal_filter(filters[:temporal])
+
+    {conditions, params} = Enum.unzip(conditions_and_params)
+
+    filter_sql =
+      if conditions != [] do
+        "AND " <> Enum.join(conditions, " AND ")
+      else
+        ""
+      end
+
+    {filter_sql, params}
+  end
+
+  defp add_entry_type_filter(acc, nil), do: acc
+
+  defp add_entry_type_filter(acc, entry_type) do
+    acc ++ [{"me.entry_type = $#{5 + length(acc)}", to_string(entry_type)}]
+  end
+
+  defp add_confidence_filter(acc, nil), do: acc
+
+  defp add_confidence_filter(acc, confidence_min) do
+    acc ++ [{"me.confidence >= $#{5 + length(acc)}", confidence_min}]
+  end
+
+  defp add_temporal_filter(acc, nil), do: acc
+
+  defp add_temporal_filter(acc, :recent) do
+    thirty_days_ago = DateTime.utc_now() |> DateTime.add(-30 * 24 * 3600, :second)
+    acc ++ [{"me.inserted_at >= $#{5 + length(acc)}", thirty_days_ago}]
   end
 
   defp do_search_entities(embedding_str, owner_id, limit) do

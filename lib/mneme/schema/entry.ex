@@ -33,7 +33,7 @@ defmodule Mneme.Schema.Entry do
     timestamps()
   end
 
-  @entry_types ~w(outcome event decision observation hypothesis note session_summary conversation_turn archived)
+  @entry_types ~w(outcome event decision observation hypothesis note session_summary conversation_turn preference milestone problem emotional archived)
 
   def entry_types, do: @entry_types
 

@@ -120,6 +120,43 @@ end
 
 ---
 
+## New Events (MemPalace Features)
+
+### Classification
+
+| Event | Measurements | Metadata |
+|-------|--------------|----------|
+| `[:mneme, :classification, :stop]` | `duration` | `type`, `confidence` |
+
+```elixir
+# Classification completed
+%{duration: 0, type: :decision, confidence: 0.8}
+```
+
+### Contradiction Detection
+
+| Event | Measurements | Metadata |
+|-------|--------------|----------|
+| `[:mneme, :contradiction_check, :stop]` | `duration` | `claims_count`, `has_conflicts` |
+
+```elixir
+# Contradiction check completed
+%{duration: 12, claims_count: 2, has_conflicts: true}
+```
+
+### Search with Filters
+
+| Event | Measurements | Metadata |
+|-------|--------------|----------|
+| `[:mneme, :search, :vector, :stop]` | `duration` | `result_count`, `tier`, `filters_applied`, `has_entry_type_filter`, `has_temporal_filter`, `has_confidence_filter` |
+
+```elixir
+# Vector search with filters
+%{duration: 45, result_count: 5, tier: :both, filters_applied: true, has_entry_type_filter: true, has_temporal_filter: false, has_confidence_filter: true}
+```
+
+---
+
 ## Integration with TelemetryMetrics
 
 For Prometheus-style metrics:
