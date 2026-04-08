@@ -2,6 +2,14 @@
 
 Pluggable memory engine for Elixir applications. Provides document ingestion with markdown-aware chunking, configurable vector embeddings (pgvector), LLM-powered entity/relation extraction, knowledge graph storage, hybrid search, and memory decay.
 
+## Inspiration
+
+Mneme draws inspiration from [MemPalace](https://github.com/milla-jovovich/mempalace), an open-source AI memory system that achieved 96.6% on the LongMemEval benchmark. Key concepts adapted for Mneme:
+
+- **LLM-free memory classification** — Regex-based categorization of memories into types (decisions, preferences, milestones, problems, emotional) without calling an LLM
+- **KG-aware contradiction detection** — Check new entries against existing knowledge to flag conflicts (attribution, status)
+- **Enhanced metadata filtering** — Wing/room-style filtering for improved retrieval accuracy
+
 ## Architecture
 
 Mneme provides two independent tiers that can be used separately or together:
@@ -154,7 +162,22 @@ Mneme.connect(entry1.id, entry2.id, "supports", weight: 0.8)
 Mneme.forget(entry.id)
 ```
 
-Entry types: `outcome`, `event`, `decision`, `observation`, `hypothesis`, `note`, `session_summary`, `conversation_turn`, `archived`.
+Entry types: `outcome`, `event`, `decision`, `observation`, `hypothesis`, `note`, `session_summary`, `conversation_turn`, `preference`, `milestone`, `problem`, `emotional`, `archived`.
+
+```elixir
+# Auto-classify content using LLM-free pattern matching (inspired by MemPalace)
+{:ok, entry} = Mneme.remember("We decided to use PostgreSQL for its JSON support",
+  scope_id: workspace_id,
+  owner_id: user_id,
+  auto_classify: true  # Detects :decision type automatically
+)
+
+# Check for contradictions against existing knowledge
+case Mneme.Knowledge.check_contradiction(content, scope_id, owner_id) do
+  :ok -> IO.puts("No conflicts")
+  {:conflict, conflicts} -> IO.puts("Conflicts detected!")
+end
+```
 
 #### Tier 1 — Full Pipeline (for documents)
 
@@ -207,6 +230,17 @@ Mneme.process_async(doc)
 
 # Format for LLM consumption
 context_text = Mneme.build_context(context_pack)
+
+# Search with filters (inspired by MemPalace's wing/room filtering)
+{:ok, results} = Mneme.search("deployment",
+  scope_id: workspace_id,
+  tier: :lightweight,
+  filters: %{
+    entry_type: :decision,      # Only decision-type entries
+    temporal: :recent,          # Last 30 days only
+    confidence_min: 0.5         # Minimum confidence
+  }
+)
 # =>
 # ## Relevant Memory Chunks
 # [Chunk 1 (score: 0.892)] The project timeline was revised...
@@ -232,6 +266,76 @@ context_text = Mneme.build_context(context_pack)
 # Re-embed entries/chunks with nil embeddings (after model change)
 {:ok, count} = Mneme.reembed()
 {:ok, count} = Mneme.reembed(batch_size: 50, concurrency: 4)
+```
+
+#### Learning
+
+Mneme can automatically learn from external sources like git history, Claude Code, and OpenCode conversations:
+
+```elixir
+# Run all learning sources (git, claude_code, opencode)
+{:ok, result} = Mneme.Learning.Pipeline.run(scope_id: workspace_id)
+# => %{git: %{fetched: 12, learned: 8, skipped: 4}, claude_code: %{...}, opencode: %{...}}
+
+# Run specific sources only
+{:ok, result} = Mneme.Learning.Pipeline.run(scope_id: workspace_id, sources: [:git])
+
+# Dry run - preview what would be learned
+{:ok, preview} = Mneme.Learning.Pipeline.run(scope_id: workspace_id, dry_run: true)
+
+# Run individual learners
+{:ok, git_result} = Mneme.Learner.Git.run(scope_id: workspace_id)
+{:ok, claude_result} = Mneme.Learner.ClaudeCode.run(scope_id: workspace_id)
+{:ok, opencode_result} = Mneme.Learner.OpenCode.run(scope_id: workspace_id)
+```
+
+##### Available Learners
+
+| Learner | Source | Detects |
+|---------|--------|---------|
+| `Mneme.Learner.Git` | Git history | Bug fixes, features, migrations, breaking changes |
+| `Mneme.Learner.ClaudeCode` | Claude Code projects | Decisions, code implementations, errors |
+| `Mneme.Learner.OpenCode` | OpenCode sessions | Decisions, implementations, project context |
+
+##### Custom Learners
+
+Implement the `Mneme.Learner` behaviour to add your own sources:
+
+```elixir
+defmodule MyApp.Learner.CI do
+  @behaviour Mneme.Learner
+
+  @impl true
+  def source, do: :ci
+
+  @impl true
+  def fetch_since(since, scope_id) do
+    # Fetch CI failures since the given date
+  end
+
+  @impl true
+  def extract(event) do
+    {:ok, %{
+      content: "CI Failure: #{event.failure_message}",
+      entry_type: :observation,
+      emotional_valence: :negative,
+      tags: ["ci", "failure"],
+      metadata: %{source: :ci, job_id: event.id}
+    }}
+  end
+
+  @impl true
+  def detect_patterns(events), do: []
+end
+```
+
+Then add to your config:
+
+```elixir
+config :mneme,
+  learning: [
+    sources: [Mneme.Learner.Git, Mneme.Learner.ClaudeCode, MyApp.Learner.CI]
+  ]
 ```
 
 ## Configuration Reference
@@ -265,6 +369,12 @@ config :mneme,
   task_supervisor: MyApp.TaskSupervisor,  # default: Mneme.TaskSupervisor
   graph_store: Mneme.Graph.PostgresGraph,  # default, swap for custom impl
   table_prefix: "mneme_"                   # default
+
+  # Learning configuration (optional)
+  learning: [
+    enabled: true,
+    sources: [Mneme.Learner.Git, Mneme.Learner.ClaudeCode, Mneme.Learner.OpenCode]
+  ]
 ```
 
 ## Embedding Providers

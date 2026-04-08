@@ -22,7 +22,7 @@ defmodule Mneme.Learning.Pipeline do
 
   alias Mneme.{Knowledge, Telemetry}
 
-  @default_learners [Mneme.Learner.Git]
+  @default_learners [Mneme.Learner.Git, Mneme.Learner.ClaudeCode, Mneme.Learner.OpenCode]
 
   @doc """
   Run learning from configured sources.

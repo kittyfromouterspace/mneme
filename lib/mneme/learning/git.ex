@@ -15,17 +15,46 @@ defmodule Mneme.Learner.Git do
       {:ok, result} = Mneme.Learner.Git.run(scope_id: scope_id)
   """
 
+  alias Mneme.Telemetry
+
   @behaviour Mneme.Learner
 
   @impl true
   def source, do: :git
 
   @impl true
-  def fetch_since(since, _scope_id) do
-    case git_log(since) do
-      {:ok, commits} -> {:ok, commits}
-      {:error, reason} -> {:error, reason}
+  def fetch_since(since, scope_id) do
+    start_time = System.monotonic_time()
+
+    result = git_log(since)
+
+    duration =
+      System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
+
+    case result do
+      {:ok, commits} ->
+        Telemetry.event(
+          [:mneme, :learn, :git, :fetch, :stop],
+          %{
+            duration_ms: duration,
+            commits_found: length(commits)
+          },
+          %{scope_id: scope_id, since: since}
+        )
+
+      {:error, reason} ->
+        Telemetry.event(
+          [:mneme, :learn, :git, :fetch, :stop],
+          %{
+            duration_ms: duration,
+            commits_found: 0,
+            error: inspect(reason)
+          },
+          %{scope_id: scope_id, since: since}
+        )
     end
+
+    result
   end
 
   @impl true

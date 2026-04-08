@@ -59,6 +59,33 @@ end
 
 ---
 
+### Learning: Git
+
+| Event | Measurements | Metadata |
+|-------|--------------|----------|
+| `[:mneme, :learn, :git, :fetch, :stop]` | `duration_ms`, `commits_found` | `scope_id`, `since` |
+| `[:mneme, :learn, :git, :stop]` | `duration_ms`, `fetched`, `learned`, `skipped` | `scope_id` |
+
+---
+
+### Learning: Claude Code
+
+| Event | Measurements | Metadata |
+|-------|--------------|----------|
+| `[:mneme, :learn, :claude_code, :fetch, :stop]` | `duration_ms`, `projects_found` | `scope_id` |
+| `[:mneme, :learn, :claude_code, :stop]` | `duration_ms`, `fetched`, `learned`, `skipped` | `scope_id` |
+
+---
+
+### Learning: OpenCode
+
+| Event | Measurements | Metadata |
+|-------|--------------|----------|
+| `[:mneme, :learn, :opencode, :fetch, :stop]` | `duration_ms`, `sessions_found` | `scope_id` |
+| `[:mneme, :learn, :opencode, :stop]` | `duration_ms`, `fetched`, `learned`, `skipped` | `scope_id` |
+
+---
+
 ### Invalidation
 
 | Event | Measurements | Metadata |
