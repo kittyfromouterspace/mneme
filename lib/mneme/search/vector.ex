@@ -3,15 +3,13 @@ defmodule Mneme.Search.Vector do
   Semantic similarity search over chunks and entries using pgvector.
   """
 
-  alias Mneme.{
-    Config,
-    Pipeline.Embedder,
-    RetrievalCounter,
-    OutcomeTracker,
-    Confidence,
-    Context.Detector,
-    Search.ContextBooster
-  }
+  alias Mneme.Confidence
+  alias Mneme.Config
+  alias Mneme.Context.Detector
+  alias Mneme.OutcomeTracker
+  alias Mneme.Pipeline.Embedder
+  alias Mneme.RetrievalCounter
+  alias Mneme.Search.ContextBooster
 
   require Logger
 
@@ -121,8 +119,7 @@ defmodule Mneme.Search.Vector do
 
   # ── Private ──────────────────────────────────────────────────────────
 
-  defp maybe_search_chunks(acc, embedding_str, opts, limit, min_score, tier)
-       when tier in [:full, :both] do
+  defp maybe_search_chunks(acc, embedding_str, opts, limit, min_score, tier) when tier in [:full, :both] do
     case Keyword.get(opts, :owner_id) do
       nil ->
         acc
@@ -232,10 +229,10 @@ defmodule Mneme.Search.Vector do
     {conditions, params} = Enum.unzip(conditions_and_params)
 
     filter_sql =
-      if conditions != [] do
-        "AND " <> Enum.join(conditions, " AND ")
-      else
+      if conditions == [] do
         ""
+      else
+        "AND " <> Enum.join(conditions, " AND ")
       end
 
     {filter_sql, params}
@@ -256,7 +253,7 @@ defmodule Mneme.Search.Vector do
   defp add_temporal_filter(acc, nil), do: acc
 
   defp add_temporal_filter(acc, :recent) do
-    thirty_days_ago = DateTime.utc_now() |> DateTime.add(-30 * 24 * 3600, :second)
+    thirty_days_ago = DateTime.add(DateTime.utc_now(), -30 * 24 * 3600, :second)
     acc ++ [{"me.inserted_at >= $#{5 + length(acc)}", thirty_days_ago}]
   end
 
@@ -303,9 +300,8 @@ defmodule Mneme.Search.Vector do
       results
     else
       # Parse context_hints and apply boost
-      results
-      |> Enum.map(fn entry ->
-        ContextBooster.apply_boost([entry], current) |> hd()
+      Enum.map(results, fn entry ->
+        [entry] |> ContextBooster.apply_boost(current) |> hd()
       end)
     end
   end
@@ -318,6 +314,6 @@ defmodule Mneme.Search.Vector do
   end
 
   defp row_to_map(columns, row) do
-    Enum.zip(columns, row) |> Map.new()
+    columns |> Enum.zip(row) |> Map.new()
   end
 end

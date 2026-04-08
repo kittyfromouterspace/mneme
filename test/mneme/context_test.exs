@@ -1,22 +1,25 @@
 defmodule Mneme.ContextTest do
   use ExUnit.Case, async: true
 
+  alias Mneme.Context.Detector
+  alias Mneme.Search.ContextBooster
+
   describe "Detector.detect/0" do
     test "returns a map with detected context keys" do
-      context = Mneme.Context.Detector.detect()
+      context = Detector.detect()
 
       assert is_map(context)
     end
 
     test "includes path_prefix when PWD is set" do
-      context = Mneme.Context.Detector.detect()
+      context = Detector.detect()
 
       # When run in test, PWD should be set
       assert Map.has_key?(context, :path_prefix)
     end
 
     test "includes repo when in a git directory" do
-      context = Mneme.Context.Detector.detect()
+      context = Detector.detect()
 
       # Should detect git repo in test environment
       assert Map.has_key?(context, :repo)
@@ -25,7 +28,7 @@ defmodule Mneme.ContextTest do
 
   describe "Detector.detect_os/0" do
     test "returns only OS context" do
-      context = Mneme.Context.Detector.detect_os()
+      context = Detector.detect_os()
 
       # OS detection should always work
       assert Map.has_key?(context, :os)
@@ -34,7 +37,7 @@ defmodule Mneme.ContextTest do
 
   describe "Detector.detect_path/0" do
     test "returns only path context" do
-      context = Mneme.Context.Detector.detect_path()
+      context = Detector.detect_path()
 
       assert Map.has_key?(context, :path_prefix)
     end
@@ -42,12 +45,12 @@ defmodule Mneme.ContextTest do
 
   describe "Detector.context_matches/2" do
     test "returns 0 for empty hints" do
-      matches = Mneme.Context.Detector.context_matches(%{}, %{os: "linux"})
+      matches = Detector.context_matches(%{}, %{os: "linux"})
       assert matches == 0
     end
 
     test "returns 0 for empty current context" do
-      matches = Mneme.Context.Detector.context_matches(%{os: "linux"}, %{})
+      matches = Detector.context_matches(%{os: "linux"}, %{})
       assert matches == 0
     end
 
@@ -55,7 +58,7 @@ defmodule Mneme.ContextTest do
       hints = %{os: "linux", repo: "test/repo"}
       current = %{os: "linux", repo: "test/repo", path_prefix: "/home"}
 
-      matches = Mneme.Context.Detector.context_matches(hints, current)
+      matches = Detector.context_matches(hints, current)
       assert matches == 2
     end
 
@@ -63,19 +66,19 @@ defmodule Mneme.ContextTest do
       hints = %{os: "linux"}
       current = %{os: "darwin"}
 
-      matches = Mneme.Context.Detector.context_matches(hints, current)
+      matches = Detector.context_matches(hints, current)
       assert matches == 0
     end
   end
 
   describe "Booster.boost/2" do
     test "returns 0 for empty entry hints" do
-      boost = Mneme.Search.ContextBooster.boost(%{}, %{os: "linux"})
+      boost = ContextBooster.boost(%{}, %{os: "linux"})
       assert boost == 0.0
     end
 
     test "returns 0 for empty current context" do
-      boost = Mneme.Search.ContextBooster.boost(%{os: "linux"}, %{})
+      boost = ContextBooster.boost(%{os: "linux"}, %{})
       assert boost == 0.0
     end
 
@@ -83,7 +86,7 @@ defmodule Mneme.ContextTest do
       hints = %{os: "linux", repo: "test/repo"}
       current = %{os: "linux", repo: "test/repo"}
 
-      boost = Mneme.Search.ContextBooster.boost(hints, current)
+      boost = ContextBooster.boost(hints, current)
       assert boost > 0.0
       assert boost <= 0.5
     end
@@ -93,7 +96,7 @@ defmodule Mneme.ContextTest do
       hints = %{os: "linux", repo: "a", path_prefix: "b", something: "c"}
       current = %{os: "linux", repo: "a", path_prefix: "b", something: "c"}
 
-      boost = Mneme.Search.ContextBooster.boost(hints, current)
+      boost = ContextBooster.boost(hints, current)
       assert boost == 0.5
     end
   end
@@ -107,7 +110,7 @@ defmodule Mneme.ContextTest do
 
       current = %{os: "linux"}
 
-      boosted = Mneme.Search.ContextBooster.apply_boost(results, current)
+      boosted = ContextBooster.apply_boost(results, current)
 
       assert length(boosted) == 2
       # First entry matches OS, should have boost
@@ -122,7 +125,7 @@ defmodule Mneme.ContextTest do
 
       current = %{os: "linux"}
 
-      boosted = Mneme.Search.ContextBooster.apply_boost(results, current)
+      boosted = ContextBooster.apply_boost(results, current)
 
       assert hd(boosted)[:content] == "Match"
     end

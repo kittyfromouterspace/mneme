@@ -4,7 +4,8 @@ defmodule Mneme.Pipeline.Embedder do
   Supports batch processing and async embedding via TaskSupervisor.
   """
 
-  alias Mneme.{Config, EmbeddingProvider}
+  alias Mneme.Config
+  alias Mneme.EmbeddingProvider
   alias Mneme.Schema.Entity
 
   require Logger
@@ -24,7 +25,8 @@ defmodule Mneme.Pipeline.Embedder do
           repo = Config.repo()
 
           updated =
-            Enum.zip(chunks, embeddings)
+            chunks
+            |> Enum.zip(embeddings)
             |> Enum.map(fn {chunk, embedding} ->
               store_embedding(repo, "mneme_chunks", chunk.id, embedding)
               %{chunk | embedding: embedding}
@@ -61,9 +63,7 @@ defmodule Mneme.Pipeline.Embedder do
           {:ok, %{entity | embedding: embedding}}
 
         {:error, reason} ->
-          Logger.warning(
-            "Mneme.Embedder: entity embedding failed for #{entity.id}: #{inspect(reason)}"
-          )
+          Logger.warning("Mneme.Embedder: entity embedding failed for #{entity.id}: #{inspect(reason)}")
 
           {:error, reason}
       end
@@ -81,7 +81,7 @@ defmodule Mneme.Pipeline.Embedder do
 
   @doc "Embed a single entry asynchronously. No-op if embedding is disabled."
   def embed_entry_async(%{id: entry_id, content: content}) when is_binary(content) do
-    unless Config.embedding_enabled?(), do: throw(:disabled)
+    if !Config.embedding_enabled?(), do: throw(:disabled)
 
     Task.Supervisor.start_child(
       Config.task_supervisor(),
@@ -94,9 +94,7 @@ defmodule Mneme.Pipeline.Embedder do
               store_embedding(Config.repo(), "mneme_entries", entry_id, embedding)
 
             {:error, reason} ->
-              Logger.warning(
-                "Mneme.Embedder: entry embedding failed for #{entry_id}: #{inspect(reason)}"
-              )
+              Logger.warning("Mneme.Embedder: entry embedding failed for #{entry_id}: #{inspect(reason)}")
           end
 
         duration = System.monotonic_time() - start_time

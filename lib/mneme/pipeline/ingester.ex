@@ -5,9 +5,11 @@ defmodule Mneme.Pipeline.Ingester do
   """
 
   import Ecto.Query
+
   alias Mneme.Config
-  alias Mneme.Schema.{Collection, Document}
   alias Mneme.Pipeline.Chunker
+  alias Mneme.Schema.Collection
+  alias Mneme.Schema.Document
 
   require Logger
 
@@ -94,13 +96,11 @@ defmodule Mneme.Pipeline.Ingester do
   defp find_existing(_collection_id, _source_type, nil, _repo), do: nil
 
   defp find_existing(collection_id, source_type, source_id, repo) do
-    from(d in Document,
-      where:
-        d.collection_id == ^collection_id and
-          d.source_type == ^source_type and
-          d.source_id == ^source_id
+    repo.one(
+      from(d in Document,
+        where: d.collection_id == ^collection_id and d.source_type == ^source_type and d.source_id == ^source_id
+      )
     )
-    |> repo.one()
   end
 
   defp create_document(
@@ -145,6 +145,6 @@ defmodule Mneme.Pipeline.Ingester do
 
   @doc "Compute SHA-256 hash of content for deduplication."
   def hash_content(content) do
-    :crypto.hash(:sha256, content) |> Base.encode16(case: :lower)
+    :sha256 |> :crypto.hash(content) |> Base.encode16(case: :lower)
   end
 end

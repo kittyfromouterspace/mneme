@@ -4,6 +4,7 @@ defmodule Mneme.Schema.Chunk do
   Preserves section hierarchy and paragraph boundaries.
   """
   use Ecto.Schema
+
   import Ecto.Changeset
 
   @primary_key {:id, :binary_id, autogenerate: true}

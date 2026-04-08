@@ -5,8 +5,10 @@ defmodule Mneme.Pipeline.Extractor do
   """
 
   import Ecto.Query
+
   alias Mneme.Config
-  alias Mneme.Schema.{Entity, Relation}
+  alias Mneme.Schema.Entity
+  alias Mneme.Schema.Relation
 
   require Logger
 
@@ -90,17 +92,13 @@ defmodule Mneme.Pipeline.Extractor do
     name = normalize_name(entity_data["name"] || entity_data[:name])
     entity_type = to_string(entity_data["type"] || entity_data[:entity_type])
 
-    unless entity_type in @entity_types do
-      {:error, "Invalid entity type: #{entity_type}"}
-    else
+    if entity_type in @entity_types do
       existing =
-        from(e in Entity,
-          where:
-            e.collection_id == ^collection_id and
-              e.name == ^name and
-              e.entity_type == ^entity_type
+        repo.one(
+          from(e in Entity,
+            where: e.collection_id == ^collection_id and e.name == ^name and e.entity_type == ^entity_type
+          )
         )
-        |> repo.one()
 
       case existing do
         nil ->
@@ -123,6 +121,8 @@ defmodule Mneme.Pipeline.Extractor do
           |> Entity.increment_mentions_changeset()
           |> repo.update()
       end
+    else
+      {:error, "Invalid entity type: #{entity_type}"}
     end
   end
 
@@ -130,17 +130,13 @@ defmodule Mneme.Pipeline.Extractor do
     relation_type = to_string(rel_data["type"] || rel_data[:relation_type])
     weight = parse_weight(rel_data["weight"] || rel_data[:weight])
 
-    unless relation_type in @relation_types do
-      {:error, "Invalid relation type: #{relation_type}"}
-    else
+    if relation_type in @relation_types do
       existing =
-        from(r in Relation,
-          where:
-            r.from_entity_id == ^from_id and
-              r.to_entity_id == ^to_id and
-              r.relation_type == ^relation_type
+        repo.one(
+          from(r in Relation,
+            where: r.from_entity_id == ^from_id and r.to_entity_id == ^to_id and r.relation_type == ^relation_type
+          )
         )
-        |> repo.one()
 
       case existing do
         nil ->
@@ -163,6 +159,8 @@ defmodule Mneme.Pipeline.Extractor do
           |> Relation.changeset(%{weight: new_weight})
           |> repo.update()
       end
+    else
+      {:error, "Invalid relation type: #{relation_type}"}
     end
   end
 

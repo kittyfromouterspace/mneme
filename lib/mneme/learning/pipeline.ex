@@ -20,7 +20,8 @@ defmodule Mneme.Learning.Pipeline do
       {:ok, preview} = Mneme.Learning.Pipeline.run(scope_id: workspace_id, dry_run: true)
   """
 
-  alias Mneme.{Knowledge, Telemetry}
+  alias Mneme.Knowledge
+  alias Mneme.Telemetry
 
   @default_learners [Mneme.Learner.Git, Mneme.Learner.ClaudeCode, Mneme.Learner.OpenCode]
 
@@ -87,13 +88,15 @@ defmodule Mneme.Learning.Pipeline do
 
   @doc "Get list of enabled learner modules from config."
   def enabled_learners do
-    Application.get_env(:mneme, :learning, [])
+    :mneme
+    |> Application.get_env(:learning, [])
     |> Keyword.get(:sources, @default_learners)
   end
 
   @doc "Check if learning is enabled."
   def enabled? do
-    Application.get_env(:mneme, :learning, [])
+    :mneme
+    |> Application.get_env(:learning, [])
     |> Keyword.get(:enabled, true)
   end
 
@@ -102,41 +105,42 @@ defmodule Mneme.Learning.Pipeline do
   defp run_learner(learner_module, scope_id, since, dry_run) do
     source = learner_module.source()
 
-    with {:ok, events} <- learner_module.fetch_since(since, scope_id) do
-      extracts = Enum.map(events, &learner_module.extract/1)
+    case learner_module.fetch_since(since, scope_id) do
+      {:ok, events} ->
+        extracts = Enum.map(events, &learner_module.extract/1)
 
-      {learned, skipped} =
-        Enum.reduce(extracts, {[], []}, fn
-          {:ok, extract}, {learned, skipped} ->
-            if dry_run do
-              {[extract | learned], skipped}
-            else
-              case Knowledge.remember(extract.content,
-                     entry_type: extract.entry_type,
-                     emotional_valence: extract.emotional_valence,
-                     tags: extract.tags,
-                     metadata: Map.put(extract.metadata, :learned_from, source),
-                     source: "system"
-                   ) do
-                {:ok, _} -> {[extract | learned], skipped}
-                _ -> {learned, skipped}
+        {learned, skipped} =
+          Enum.reduce(extracts, {[], []}, fn
+            {:ok, extract}, {learned, skipped} ->
+              if dry_run do
+                {[extract | learned], skipped}
+              else
+                case Knowledge.remember(extract.content,
+                       entry_type: extract.entry_type,
+                       emotional_valence: extract.emotional_valence,
+                       tags: extract.tags,
+                       metadata: Map.put(extract.metadata, :learned_from, source),
+                       source: "system"
+                     ) do
+                  {:ok, _} -> {[extract | learned], skipped}
+                  _ -> {learned, skipped}
+                end
               end
-            end
 
-          {:skip, _reason}, {learned, skipped} ->
-            {learned, [skipped]}
+            {:skip, _reason}, {learned, skipped} ->
+              {learned, [skipped]}
 
-          _, acc ->
-            acc
-        end)
+            _, acc ->
+              acc
+          end)
 
-      {source,
-       %{
-         fetched: length(events),
-         learned: length(learned),
-         skipped: length(skipped)
-       }}
-    else
+        {source,
+         %{
+           fetched: length(events),
+           learned: length(learned),
+           skipped: length(skipped)
+         }}
+
       {:error, reason} ->
         {source, %{fetched: 0, learned: 0, skipped: 0, error: inspect(reason)}}
     end

@@ -45,7 +45,7 @@ defmodule Mneme.Search.Graph do
     if entry_ids == [] do
       {:ok, []}
     else
-      bin_ids = Enum.map(entry_ids, &uuid_to_bin/1) |> Enum.reject(&is_nil/1)
+      bin_ids = entry_ids |> Enum.map(&uuid_to_bin/1) |> Enum.reject(&is_nil/1)
 
       sql = """
       WITH RECURSIVE edge_walk AS (
@@ -79,7 +79,8 @@ defmodule Mneme.Search.Graph do
         {:ok, %{rows: rows, columns: columns}} ->
           results =
             Enum.map(rows, fn row ->
-              Enum.zip(columns, row)
+              columns
+              |> Enum.zip(row)
               |> Map.new()
               |> Map.put("_related", true)
             end)

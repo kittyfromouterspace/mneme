@@ -118,8 +118,7 @@ defmodule Mneme.Telemetry do
 
   defp extract_measurements({:ok, %Mneme.Schema.Entry{}}), do: {%{}, %{status: :ok}}
 
-  defp extract_measurements({:ok, count}) when is_integer(count),
-    do: {%{count: count}, %{status: :ok}}
+  defp extract_measurements({:ok, count}) when is_integer(count), do: {%{count: count}, %{status: :ok}}
 
   defp extract_measurements({:ok, _}), do: {%{}, %{status: :ok}}
   defp extract_measurements({:error, _}), do: {%{}, %{status: :error}}

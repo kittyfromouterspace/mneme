@@ -3,7 +3,10 @@ defmodule Mneme.Schema.Relation do
   Graph edge between entities. 8 typed relations with confidence weights.
   """
   use Ecto.Schema
+
   import Ecto.Changeset
+
+  alias Mneme.Schema.Entity
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @timestamps_opts [type: :utc_datetime_usec]
@@ -17,8 +20,8 @@ defmodule Mneme.Schema.Relation do
     field(:owner_id, :binary_id)
     field(:scope_id, :binary_id)
 
-    belongs_to(:from_entity, Mneme.Schema.Entity, type: :binary_id)
-    belongs_to(:to_entity, Mneme.Schema.Entity, type: :binary_id)
+    belongs_to(:from_entity, Entity, type: :binary_id)
+    belongs_to(:to_entity, Entity, type: :binary_id)
     belongs_to(:source_chunk, Mneme.Schema.Chunk, type: :binary_id)
 
     timestamps()

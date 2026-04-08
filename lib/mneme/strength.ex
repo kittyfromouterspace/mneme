@@ -25,7 +25,7 @@ defmodule Mneme.Strength do
 
   defp decay_factor(entry, now) do
     last = entry.last_accessed_at || entry.inserted_at
-    days = DateTime.diff(now, last, :second) / 86400.0
+    days = DateTime.diff(now, last, :second) / 86_400.0
 
     half_life = entry.half_life_days || 7.0
 

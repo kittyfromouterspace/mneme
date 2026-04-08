@@ -7,9 +7,13 @@ defmodule Mneme.Pipeline do
   """
 
   import Ecto.Query
+
   alias Mneme.Config
-  alias Mneme.Schema.{Chunk, PipelineRun}
-  alias Mneme.Pipeline.{Chunker, Embedder, Extractor}
+  alias Mneme.Pipeline.Chunker
+  alias Mneme.Pipeline.Embedder
+  alias Mneme.Pipeline.Extractor
+  alias Mneme.Schema.Chunk
+  alias Mneme.Schema.PipelineRun
 
   require Logger
 
@@ -129,7 +133,7 @@ defmodule Mneme.Pipeline do
     scope_id = Keyword.get(opts, :scope_id)
 
     # Delete existing chunks (re-processing)
-    from(c in Chunk, where: c.document_id == ^document.id) |> repo.delete_all()
+    repo.delete_all(from(c in Chunk, where: c.document_id == ^document.id))
 
     # Chunk the content
     raw_chunks = Chunker.chunk(document.content)
@@ -196,9 +200,7 @@ defmodule Mneme.Pipeline do
               )
 
             entity_map =
-              persisted_entities
-              |> Enum.map(fn e -> {String.downcase(e.name), e.id} end)
-              |> Map.new()
+              Map.new(persisted_entities, fn e -> {String.downcase(e.name), e.id} end)
 
             {:ok, persisted_relations} =
               Extractor.persist_relations(relations, entity_map,
@@ -210,9 +212,7 @@ defmodule Mneme.Pipeline do
             {entities_acc ++ persisted_entities, relations_acc ++ persisted_relations}
 
           {:error, reason} ->
-            Logger.warning(
-              "Mneme.Pipeline: extraction failed for chunk #{chunk.id}: #{inspect(reason)}"
-            )
+            Logger.warning("Mneme.Pipeline: extraction failed for chunk #{chunk.id}: #{inspect(reason)}")
 
             {entities_acc, relations_acc}
         end

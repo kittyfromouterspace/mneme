@@ -12,7 +12,12 @@ defmodule Mneme.Consolidation do
   Uses Task.async_stream for CPU-bound operations.
   """
 
-  alias Mneme.{Config, Strength, SchemaIndex, ConflictDetection, Conflicts, Telemetry}
+  alias Mneme.Config
+  alias Mneme.ConflictDetection
+  alias Mneme.Conflicts
+  alias Mneme.SchemaIndex
+  alias Mneme.Strength
+  alias Mneme.Telemetry
 
   @default_decay_threshold 0.05
   @default_merge_threshold 0.35
@@ -66,7 +71,7 @@ defmodule Mneme.Consolidation do
     duration_ms =
       System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
 
-    unless dry_run do
+    if !dry_run do
       persist_consolidation_run(
         scope_id,
         owner_id,
@@ -119,7 +124,7 @@ defmodule Mneme.Consolidation do
          ) do
       {:ok, %{rows: rows, columns: columns}} ->
         Enum.map(rows, fn row ->
-          Enum.zip(columns, row) |> Map.new()
+          columns |> Enum.zip(row) |> Map.new()
         end)
 
       _ ->
@@ -179,10 +184,14 @@ defmodule Mneme.Consolidation do
       valid_clusters = Enum.filter(clusters, fn indices -> length(indices) >= min_cluster end)
 
       summaries =
-        Enum.map(valid_clusters, fn indices ->
-          cluster = Enum.map(indices, &Enum.at(entries, &1))
-          create_semantic_summary(cluster)
-        end)
+        if valid_clusters == [] do
+          []
+        else
+          Enum.map(valid_clusters, fn indices ->
+            cluster = Enum.map(indices, &Enum.at(entries, &1))
+            create_semantic_summary(cluster)
+          end)
+        end
 
       %{
         merged: length(List.flatten(valid_clusters)),
@@ -204,14 +213,14 @@ defmodule Mneme.Consolidation do
       end
     end
 
-    union = fn {i, j} ->
+    union = fn {i, j}, acc ->
       root_i = find.(find, i)
       root_j = find.(find, j)
 
-      if root_i != root_j do
-        Map.put(parent, root_i, root_j)
+      if root_i == root_j do
+        acc
       else
-        parent
+        Map.put(acc, root_i, root_j)
       end
     end
 
@@ -247,8 +256,8 @@ defmodule Mneme.Consolidation do
     if size_a == 0 and size_b == 0 do
       1.0
     else
-      intersection = MapSet.intersection(set_a, set_b) |> MapSet.size()
-      union = MapSet.union(set_a, set_b) |> MapSet.size()
+      intersection = set_a |> MapSet.intersection(set_b) |> MapSet.size()
+      union = set_a |> MapSet.union(set_b) |> MapSet.size()
 
       if union == 0 do
         0.0

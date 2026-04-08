@@ -6,7 +6,8 @@ defmodule Mneme.Outcome do
   (outcome_good) or irrelevant (outcome_bad), which adjusts half-life.
   """
 
-  alias Mneme.{Config, OutcomeTracker}
+  alias Mneme.Config
+  alias Mneme.OutcomeTracker
 
   @positive_delta 5
   @negative_delta -3
@@ -36,7 +37,8 @@ defmodule Mneme.Outcome do
 
   defp apply_outcome(entry_ids, :good) do
     delta =
-      Application.get_env(:mneme, :outcome_feedback, [])
+      :mneme
+      |> Application.get_env(:outcome_feedback, [])
       |> Keyword.get(:positive_half_life_delta, @positive_delta)
 
     do_update(entry_ids, delta, 1)
@@ -44,7 +46,8 @@ defmodule Mneme.Outcome do
 
   defp apply_outcome(entry_ids, :bad) do
     delta =
-      -(Application.get_env(:mneme, :outcome_feedback, [])
+      -(:mneme
+        |> Application.get_env(:outcome_feedback, [])
         |> Keyword.get(:negative_half_life_delta, abs(@negative_delta)))
 
     do_update(entry_ids, delta, -1)

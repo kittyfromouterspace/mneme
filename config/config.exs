@@ -1,9 +1,6 @@
 import Config
 
-config :mneme,
-  repo: Mneme.TestRepo,
-  embedding: [provider: Mneme.Embedding.Mock, mock: true],
-  table_prefix: "mneme_test_"
+config :logger, level: :warning
 
 config :mneme, Mneme.TestRepo,
   database: "mneme_test",
@@ -18,4 +15,7 @@ config :mneme, Mneme.TestRepo,
 
 config :mneme, ecto_repos: [Mneme.TestRepo]
 
-config :logger, level: :warning
+config :mneme,
+  repo: Mneme.TestRepo,
+  embedding: [provider: Mneme.Embedding.Mock, mock: true],
+  table_prefix: "mneme_test_"

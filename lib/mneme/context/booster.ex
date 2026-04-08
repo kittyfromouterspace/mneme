@@ -3,6 +3,8 @@ defmodule Mneme.Search.ContextBooster do
   Calculate context boost for search results based on entry hints matching current context.
   """
 
+  alias Mneme.Context.Detector
+
   @default_boost 0.15
   @max_boost 0.5
 
@@ -25,7 +27,7 @@ defmodule Mneme.Search.ContextBooster do
         0.0
 
       true ->
-        matches = Mneme.Context.Detector.context_matches(entry_hints, current_context)
+        matches = Detector.context_matches(entry_hints, current_context)
 
         if matches == 0 do
           0.0
@@ -37,7 +39,8 @@ defmodule Mneme.Search.ContextBooster do
 
   @doc "Apply context boost to a list of search results."
   def apply_boost(results, current_context) when is_list(results) do
-    Enum.map(results, fn entry ->
+    results
+    |> Enum.map(fn entry ->
       entry_hints = entry[:context_hints] || entry["context_hints"] || %{}
 
       boost = boost(entry_hints, current_context)
@@ -46,7 +49,8 @@ defmodule Mneme.Search.ContextBooster do
       original_score =
         entry[:score] || entry["score"] || entry[:similarity] || entry["similarity"] || 0.0
 
-      Map.put(entry, :score, original_score + boost)
+      entry
+      |> Map.put(:score, original_score + boost)
       |> Map.put("score", original_score + boost)
     end)
     |> Enum.sort_by(&(&1[:score] || &1["score"] || 0), :desc)
@@ -65,7 +69,7 @@ defmodule Mneme.Search.ContextBooster do
         0.0
 
       true ->
-        matches = Mneme.Context.Detector.context_matches(entry_hints, current_context)
+        matches = Detector.context_matches(entry_hints, current_context)
         min(boost_factor * matches, max_boost)
     end
   end

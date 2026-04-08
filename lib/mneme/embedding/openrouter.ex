@@ -87,11 +87,9 @@ defmodule Mneme.Embedding.OpenRouter do
     end
   end
 
-  defp extract_usage(%{"usage" => %{"total_tokens" => tokens}}) when is_integer(tokens),
-    do: %{tokens_used: tokens}
+  defp extract_usage(%{"usage" => %{"total_tokens" => tokens}}) when is_integer(tokens), do: %{tokens_used: tokens}
 
-  defp extract_usage(%{"usage" => %{"prompt_tokens" => tokens}}) when is_integer(tokens),
-    do: %{tokens_used: tokens}
+  defp extract_usage(%{"usage" => %{"prompt_tokens" => tokens}}) when is_integer(tokens), do: %{tokens_used: tokens}
 
   defp extract_usage(_), do: %{tokens_used: 0}
 end

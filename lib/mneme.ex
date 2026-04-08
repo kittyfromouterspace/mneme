@@ -35,7 +35,8 @@ defmodule Mneme do
       {:ok, context} = Mneme.search("project timeline", owner_id: user_id)
   """
 
-  alias Mneme.{Pipeline, Search}
+  alias Mneme.Pipeline
+  alias Mneme.Search
   alias Mneme.Search.Completion
 
   # ── Full Pipeline API (Tier 1) ───────────────────────────────────────

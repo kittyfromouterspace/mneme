@@ -3,7 +3,8 @@ defmodule Mneme.Search do
   Unified search combining vector similarity, graph traversal, and edge following.
   """
 
-  alias Mneme.Search.{Vector, Graph}
+  alias Mneme.Search.Graph
+  alias Mneme.Search.Vector
 
   require Logger
 
@@ -39,7 +40,7 @@ defmodule Mneme.Search do
         # Edge following for Tier 2 entries
         related_entries =
           if tier in [:lightweight, :both] do
-            entry_ids = Enum.map(entries, & &1["id"]) |> Enum.reject(&is_nil/1)
+            entry_ids = entries |> Enum.map(& &1["id"]) |> Enum.reject(&is_nil/1)
 
             case Graph.follow_edges(entry_ids, hops: hops) do
               {:ok, related} -> related
@@ -95,12 +96,10 @@ defmodule Mneme.Search do
           end)
 
         all_entities =
-          (entity_results ++ expanded_entities)
-          |> Enum.uniq_by(fn e -> e["id"] || e[:id] end)
+          Enum.uniq_by(entity_results ++ expanded_entities, fn e -> e["id"] || e[:id] end)
 
         all_relations =
-          expanded_relations
-          |> Enum.uniq_by(fn r -> {r[:from_id], r[:to_id], r[:relation_type]} end)
+          Enum.uniq_by(expanded_relations, fn r -> {r[:from_id], r[:to_id], r[:relation_type]} end)
 
         {all_entities, all_relations}
 

@@ -7,10 +7,13 @@ defmodule Mneme.Extraction.LlmJson do
   """
   @behaviour Mneme.ExtractionProvider
 
+  alias Mneme.Schema.Entity
+  alias Mneme.Schema.Relation
+
   require Logger
 
-  @entity_types Mneme.Schema.Entity.entity_types() |> Enum.join(", ")
-  @relation_types Mneme.Schema.Relation.relation_types() |> Enum.join(", ")
+  @entity_types Enum.join(Entity.entity_types(), ", ")
+  @relation_types Enum.join(Relation.relation_types(), ", ")
 
   @extraction_prompt """
   You are an expert knowledge graph builder.
@@ -83,7 +86,7 @@ defmodule Mneme.Extraction.LlmJson do
   end
 
   defp validate_entities(entities) when is_list(entities) do
-    valid_types = Mneme.Schema.Entity.entity_types()
+    valid_types = Entity.entity_types()
 
     Enum.filter(entities, fn entity ->
       is_map(entity) &&
@@ -96,7 +99,7 @@ defmodule Mneme.Extraction.LlmJson do
   defp validate_entities(_), do: []
 
   defp validate_relations(relations) when is_list(relations) do
-    valid_types = Mneme.Schema.Relation.relation_types()
+    valid_types = Relation.relation_types()
 
     Enum.filter(relations, fn rel ->
       is_map(rel) &&

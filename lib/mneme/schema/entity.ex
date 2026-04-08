@@ -4,6 +4,7 @@ defmodule Mneme.Schema.Entity do
   10 entity types with mention counting and prominence tracking.
   """
   use Ecto.Schema
+
   import Ecto.Changeset
 
   @primary_key {:id, :binary_id, autogenerate: true}
@@ -51,10 +52,6 @@ defmodule Mneme.Schema.Entity do
   end
 
   def increment_mentions_changeset(entity) do
-    entity
-    |> change(%{
-      mention_count: entity.mention_count + 1,
-      last_seen_at: DateTime.utc_now()
-    })
+    change(entity, %{mention_count: entity.mention_count + 1, last_seen_at: DateTime.utc_now()})
   end
 end

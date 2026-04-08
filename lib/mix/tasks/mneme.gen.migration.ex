@@ -11,8 +11,6 @@ defmodule Mix.Tasks.Mneme.Gen.Migration do
   """
   use Mix.Task
 
-  @shortdoc "Generate Mneme database migrations"
-
   @impl true
   def run(args) do
     {opts, _, _} = OptionParser.parse(args, strict: [dimensions: :integer, repo: :string])
@@ -29,9 +27,9 @@ defmodule Mix.Tasks.Mneme.Gen.Migration do
     content = migration_content(dimensions)
     File.write!(target, content)
 
-    Mix.shell().info([:green, "* creating ", :reset, target])
-    Mix.shell().info("")
-    Mix.shell().info("Run `mix ecto.migrate` to apply the migration.")
+    IO.puts(IO.ANSI.green() <> "* creating " <> IO.ANSI.reset() <> target)
+    IO.puts("")
+    IO.puts("Run `mix ecto.migrate` to apply the migration.")
   end
 
   defp migration_content(dimensions) do

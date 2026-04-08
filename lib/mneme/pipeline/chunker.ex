@@ -125,7 +125,9 @@ defmodule Mneme.Pipeline.Chunker do
           overlap_text = extract_overlap(current.content, overlap_chars)
 
           new =
-            if overlap_text != "" do
+            if overlap_text == "" do
+              new_chunk(section)
+            else
               %__MODULE__{
                 content: overlap_text <> "\n\n" <> section.text,
                 sequence: 0,
@@ -134,8 +136,6 @@ defmodule Mneme.Pipeline.Chunker do
                 token_count: estimate_tokens(overlap_text <> "\n\n" <> section.text),
                 heading_context: section.heading || current.heading_context
               }
-            else
-              new_chunk(section)
             end
 
           {chunks ++ [current], new}

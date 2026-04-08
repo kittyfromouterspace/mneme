@@ -4,6 +4,7 @@ defmodule Mneme.Schema.Entry do
   Simple store-embed-search with access tracking and decay support.
   """
   use Ecto.Schema
+
   import Ecto.Changeset
 
   @primary_key {:id, :binary_id, autogenerate: true}
@@ -69,10 +70,6 @@ defmodule Mneme.Schema.Entry do
   end
 
   def bump_access_changeset(entry) do
-    entry
-    |> change(%{
-      access_count: entry.access_count + 1,
-      last_accessed_at: DateTime.utc_now()
-    })
+    change(entry, %{access_count: entry.access_count + 1, last_accessed_at: DateTime.utc_now()})
   end
 end

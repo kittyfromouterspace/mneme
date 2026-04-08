@@ -15,9 +15,9 @@ defmodule Mneme.Learner.Git do
       {:ok, result} = Mneme.Learner.Git.run(scope_id: scope_id)
   """
 
-  alias Mneme.Telemetry
-
   @behaviour Mneme.Learner
+
+  alias Mneme.Telemetry
 
   @impl true
   def source, do: :git
@@ -61,7 +61,7 @@ defmodule Mneme.Learner.Git do
   def extract(commit) do
     message = commit.subject
     body = commit.body || ""
-    full_message = if body != "", do: "#{message}\n\n#{body}", else: message
+    full_message = if body == "", do: message, else: "#{message}\n\n#{body}"
 
     type = detect_type(message)
     valence = detect_valence(type, message)
@@ -125,9 +125,7 @@ defmodule Mneme.Learner.Git do
     # Get commits since the given date with full message
     format = "%H|%s|%b|%an|%D"
 
-    case System.cmd("git", ["log", "--since=#{since}", "--pretty=format:#{format}", "--all"],
-           stderr_to_stdout: true
-         ) do
+    case System.cmd("git", ["log", "--since=#{since}", "--pretty=format:#{format}", "--all"], stderr_to_stdout: true) do
       {output, 0} when output != "" ->
         commits =
           output
@@ -266,18 +264,14 @@ defmodule Mneme.Learner.Git do
   end
 
   defp process_commit(commit) do
-    case extract(commit) do
-      {:ok, extract} ->
-        Mneme.remember(extract.content,
-          entry_type: extract.entry_type,
-          emotional_valence: extract.emotional_valence,
-          tags: extract.tags,
-          metadata: extract.metadata,
-          source: "system"
-        )
+    {:ok, extract} = extract(commit)
 
-      result ->
-        result
-    end
+    Mneme.remember(extract.content,
+      entry_type: extract.entry_type,
+      emotional_valence: extract.emotional_valence,
+      tags: extract.tags,
+      metadata: extract.metadata,
+      source: "system"
+    )
   end
 end

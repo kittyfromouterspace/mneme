@@ -82,6 +82,6 @@ defmodule Mneme.WorkingMemory.Server do
   end
 
   defp generate_id do
-    :crypto.strong_rand_bytes(8) |> Base.url_encode64(padding: false)
+    8 |> :crypto.strong_rand_bytes() |> Base.url_encode64(padding: false)
   end
 end

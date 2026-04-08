@@ -1,8 +1,8 @@
 defmodule Mneme.SearchTest do
   use Mneme.DataCase, async: false
 
-  alias Mneme.Schema.Entry
   alias Mneme.Config
+  alias Mneme.Schema.Entry
 
   describe "search API" do
     test "search returns context pack structure" do
@@ -49,7 +49,7 @@ defmodule Mneme.SearchTest do
     test "forget removes entry from database" do
       entry = Fixtures.entry()
 
-      assert Config.repo().get(Entry, entry.id) != nil
+      assert Config.repo().get(Entry, entry.id)
 
       {:ok, _} = Mneme.forget(entry.id)
 

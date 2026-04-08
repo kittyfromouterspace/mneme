@@ -196,6 +196,6 @@ defmodule Mneme.Conflicts do
   end
 
   defp row_to_map(columns, row) do
-    Enum.zip(columns, row) |> Map.new()
+    columns |> Enum.zip(row) |> Map.new()
   end
 end

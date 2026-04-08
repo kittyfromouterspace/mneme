@@ -17,8 +17,9 @@ defmodule Mneme.Mipmap do
       {:ok, results} = Mneme.Mipmap.retrieve("auth", scope_id, level: :abstract)
   """
 
-  alias Mneme.{Config, Telemetry}
+  alias Mneme.Config
   alias Mneme.Pipeline.Embedder
+  alias Mneme.Telemetry
 
   @levels [:anchor, :abstract, :summary, :full]
 
@@ -63,7 +64,7 @@ defmodule Mneme.Mipmap do
         )
     end)
 
-    count = Map.keys(mipmaps) |> Enum.reject(&(&1 == :entry_id)) |> length()
+    count = mipmaps |> Map.keys() |> Enum.reject(&(&1 == :entry_id)) |> length()
     {:ok, count}
   end
 
@@ -101,7 +102,7 @@ defmodule Mneme.Mipmap do
           {:ok, %{rows: rows, columns: columns}} ->
             results =
               Enum.map(rows, fn row ->
-                Enum.zip(columns, row) |> Map.new()
+                columns |> Enum.zip(row) |> Map.new()
               end)
 
             {:ok, results, actual_level}

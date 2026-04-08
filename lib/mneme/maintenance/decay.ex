@@ -5,6 +5,7 @@ defmodule Mneme.Maintenance.Decay do
   """
 
   import Ecto.Query
+
   alias Mneme.Config
 
   require Logger
@@ -22,16 +23,15 @@ defmodule Mneme.Maintenance.Decay do
     min_access_count = Keyword.get(opts, :min_access_count, 3)
     repo = Config.repo()
 
-    cutoff = DateTime.utc_now() |> DateTime.add(-max_age_days * 86400, :second)
+    cutoff = DateTime.add(DateTime.utc_now(), -max_age_days * 86_400, :second)
 
     {count, _} =
-      from(e in "mneme_entries",
-        where:
-          e.entry_type != "archived" and
-            (is_nil(e.last_accessed_at) or e.last_accessed_at < ^cutoff) and
-            e.access_count < ^min_access_count
-      )
-      |> repo.update_all(set: [entry_type: "archived", updated_at: DateTime.utc_now()])
+      repo.update_all(
+        from(e in "mneme_entries",
+          where:
+            e.entry_type != "archived" and (is_nil(e.last_accessed_at) or e.last_accessed_at < ^cutoff) and
+              e.access_count < ^min_access_count
+        ), set: [entry_type: "archived", updated_at: DateTime.utc_now()])
 
     duration = System.monotonic_time() - start_time
 

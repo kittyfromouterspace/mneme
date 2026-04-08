@@ -28,8 +28,7 @@ defmodule Mneme.Context.Detector do
     context =
       @detectors
       |> Enum.flat_map(&run_detector/1)
-      |> Enum.map(fn %{key: k, value: v} -> {k, v} end)
-      |> Map.new()
+      |> Map.new(fn %{key: k, value: v} -> {k, v} end)
 
     duration =
       System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
@@ -45,23 +44,23 @@ defmodule Mneme.Context.Detector do
 
   @doc "Detect only git context (safe to call even outside a repo)."
   def detect_git do
-    run_detector(:git)
-    |> Enum.map(fn %{key: k, value: v} -> {k, v} end)
-    |> Map.new()
+    :git
+    |> run_detector()
+    |> Map.new(fn %{key: k, value: v} -> {k, v} end)
   end
 
   @doc "Detect the current working directory."
   def detect_path do
-    run_detector(:path)
-    |> Enum.map(fn %{key: k, value: v} -> {k, v} end)
-    |> Map.new()
+    :path
+    |> run_detector()
+    |> Map.new(fn %{key: k, value: v} -> {k, v} end)
   end
 
   @doc "Detect the operating system."
   def detect_os do
-    run_detector(:os)
-    |> Enum.map(fn %{key: k, value: v} -> {k, v} end)
-    |> Map.new()
+    :os
+    |> run_detector()
+    |> Map.new(fn %{key: k, value: v} -> {k, v} end)
   end
 
   @doc "List available detectors."
@@ -104,8 +103,7 @@ defmodule Mneme.Context.Detector do
   end
 
   defp detect_os_impl do
-    [{:os, :os.type() |> elem(0) |> Atom.to_string()}]
-    |> Enum.map(fn {k, v} -> %{key: k, value: v} end)
+    Enum.map([{:os, :os.type() |> elem(0) |> Atom.to_string()}], fn {k, v} -> %{key: k, value: v} end)
   end
 
   defp parse_git_remote(remote) do

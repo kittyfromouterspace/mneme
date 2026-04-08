@@ -14,9 +14,9 @@ defmodule Mneme.Learner.ClaudeCode do
       {:ok, result} = Mneme.Learner.ClaudeCode.run(scope_id: scope_id)
   """
 
-  alias Mneme.Telemetry
-
   @behaviour Mneme.Learner
+
+  alias Mneme.Telemetry
 
   @impl true
   def source, do: :claude_code
@@ -38,28 +38,16 @@ defmodule Mneme.Learner.ClaudeCode do
     duration =
       System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
 
-    case result do
-      {:ok, projects} ->
-        Telemetry.event(
-          [:mneme, :learn, :claude_code, :fetch, :stop],
-          %{
-            duration_ms: duration,
-            projects_found: length(projects)
-          },
-          %{scope_id: scope_id}
-        )
+    {:ok, projects} = result
 
-      _ ->
-        Telemetry.event(
-          [:mneme, :learn, :claude_code, :fetch, :stop],
-          %{
-            duration_ms: duration,
-            projects_found: 0,
-            error: true
-          },
-          %{scope_id: scope_id}
-        )
-    end
+    Telemetry.event(
+      [:mneme, :learn, :claude_code, :fetch, :stop],
+      %{
+        duration_ms: duration,
+        projects_found: length(projects)
+      },
+      %{scope_id: scope_id}
+    )
 
     result
   end
@@ -233,16 +221,12 @@ defmodule Mneme.Learner.ClaudeCode do
   end
 
   defp build_content(project) do
-    conversation_summaries =
-      project.conversations
-      |> Enum.map(&summarize_conversation/1)
-      |> Enum.join("\n")
+    conversation_summaries = Enum.map_join(project.conversations, "\n", &summarize_conversation/1)
 
     project_files =
       project.conversations
       |> Enum.filter(&(&1.type != :conversation))
-      |> Enum.map(&summarize_file/1)
-      |> Enum.join("\n")
+      |> Enum.map_join("\n", &summarize_file/1)
 
     "Claude Code project: #{project.name}\n\nConversations:\n#{conversation_summaries}\n\nProject files:\n#{project_files}"
   end
@@ -250,7 +234,7 @@ defmodule Mneme.Learner.ClaudeCode do
   defp summarize_conversation(conv) do
     content = conv.content
 
-    lines = String.split(content, "\n") |> Enum.take(20)
+    lines = content |> String.split("\n") |> Enum.take(20)
     summary = Enum.join(lines, " ")
 
     "[#{conv.file}] #{summary}"
@@ -261,10 +245,7 @@ defmodule Mneme.Learner.ClaudeCode do
   end
 
   defp detect_type(project) do
-    all_content =
-      project.conversations
-      |> Enum.map(& &1.content)
-      |> Enum.join(" ")
+    all_content = Enum.map_join(project.conversations, " ", & &1.content)
 
     if String.contains?(all_content, ["decided", "chose", "went with"]) do
       :decision
@@ -276,8 +257,7 @@ defmodule Mneme.Learner.ClaudeCode do
   defp detect_valence(project) do
     all_content =
       project.conversations
-      |> Enum.map(& &1.content)
-      |> Enum.join(" ")
+      |> Enum.map_join(" ", & &1.content)
       |> String.downcase()
 
     if String.contains?(all_content, ["error", "fail", "broken", "bug"]) do
@@ -300,18 +280,14 @@ defmodule Mneme.Learner.ClaudeCode do
   end
 
   defp process_project(project) do
-    case extract(project) do
-      {:ok, extract} ->
-        Mneme.remember(extract.content,
-          entry_type: extract.entry_type,
-          emotional_valence: extract.emotional_valence,
-          tags: extract.tags,
-          metadata: extract.metadata,
-          source: "system"
-        )
+    {:ok, extract} = extract(project)
 
-      result ->
-        result
-    end
+    Mneme.remember(extract.content,
+      entry_type: extract.entry_type,
+      emotional_valence: extract.emotional_valence,
+      tags: extract.tags,
+      metadata: extract.metadata,
+      source: "system"
+    )
   end
 end

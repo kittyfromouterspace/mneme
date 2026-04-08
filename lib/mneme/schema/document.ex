@@ -4,6 +4,7 @@ defmodule Mneme.Schema.Document do
   Content hash enables deduplication — unchanged documents skip re-processing.
   """
   use Ecto.Schema
+
   import Ecto.Changeset
 
   @primary_key {:id, :binary_id, autogenerate: true}

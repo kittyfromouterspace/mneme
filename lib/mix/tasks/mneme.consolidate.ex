@@ -19,8 +19,6 @@ defmodule Mix.Tasks.Mneme.Consolidate do
   """
   use Mix.Task
 
-  @shortdoc "Run Mneme sleep consolidation"
-
   @impl true
   def run(args) do
     {opts, _, _} =
@@ -34,8 +32,8 @@ defmodule Mix.Tasks.Mneme.Consolidate do
         ]
       )
 
-    unless opts[:scope_id] do
-      Mix.raise("--scope-id is required")
+    if !opts[:scope_id] do
+      raise "--scope-id is required"
     end
 
     consolidation_opts = [
@@ -48,15 +46,13 @@ defmodule Mix.Tasks.Mneme.Consolidate do
 
     IO.puts("\n#{IO.ANSI.green()}Running Mneme consolidation...#{IO.ANSI.reset()}\n")
 
-    case Mneme.Consolidation.run(consolidation_opts) do
-      {:ok, result} ->
-        IO.puts("Decayed: #{result.decayed}")
-        IO.puts("Removed: #{result.removed}")
-        IO.puts("Merged: #{result.merged}")
-        IO.puts("Semantic summaries created: #{result.semantic_created}")
-        IO.puts("Conflicts detected: #{result.conflicts_detected}")
-        IO.puts("Duration: #{result.duration_ms}ms")
-        IO.puts("\n#{IO.ANSI.green()}Consolidation complete!#{IO.ANSI.reset()}")
-    end
+    {:ok, result} = Mneme.Consolidation.run(consolidation_opts)
+    IO.puts("Decayed: #{result.decayed}")
+    IO.puts("Removed: #{result.removed}")
+    IO.puts("Merged: #{result.merged}")
+    IO.puts("Semantic summaries created: #{result.semantic_created}")
+    IO.puts("Conflicts detected: #{result.conflicts_detected}")
+    IO.puts("Duration: #{result.duration_ms}ms")
+    IO.puts("\n#{IO.ANSI.green()}Consolidation complete!#{IO.ANSI.reset()}")
   end
 end

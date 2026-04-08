@@ -3,6 +3,7 @@ defmodule Mneme.Schema.Collection do
   Groups related memory documents. One per user/workspace/topic.
   """
   use Ecto.Schema
+
   import Ecto.Changeset
 
   @primary_key {:id, :binary_id, autogenerate: true}

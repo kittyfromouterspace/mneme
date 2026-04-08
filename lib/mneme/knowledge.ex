@@ -5,10 +5,16 @@ defmodule Mneme.Knowledge do
   """
 
   import Ecto.Query
+
+  alias Mneme.Classification
   alias Mneme.Config
-  alias Mneme.Schema.{Entry, Edge}
+  alias Mneme.Context.Detector
   alias Mneme.Pipeline.Embedder
-  alias Mneme.{Valence, SchemaFit, Strength, Context.Detector, Classification}
+  alias Mneme.Schema.Edge
+  alias Mneme.Schema.Entry
+  alias Mneme.SchemaFit
+  alias Mneme.Strength
+  alias Mneme.Valence
 
   require Logger
 
@@ -63,8 +69,7 @@ defmodule Mneme.Knowledge do
         summary: Keyword.get(opts, :summary),
         source: Keyword.get(opts, :source, "system"),
         source_id: Keyword.get(opts, :source_id),
-        metadata:
-          Keyword.get(opts, :metadata, %{}) |> maybe_add_classification(classification_confidence),
+        metadata: opts |> Keyword.get(:metadata, %{}) |> maybe_add_classification(classification_confidence),
         confidence: Keyword.get(opts, :confidence, 1.0),
         half_life_days: adjusted_half_life,
         pinned: Keyword.get(opts, :pinned, false),
@@ -126,12 +131,13 @@ defmodule Mneme.Knowledge do
       repo = Config.repo()
       limit = Keyword.get(opts, :limit, 20)
 
-      from(e in Entry,
-        where: e.scope_id == ^scope_id and e.entry_type != "archived",
-        order_by: [desc: e.inserted_at],
-        limit: ^limit
+      repo.all(
+        from(e in Entry,
+          where: e.scope_id == ^scope_id and e.entry_type != "archived",
+          order_by: [desc: e.inserted_at],
+          limit: ^limit
+        )
       )
-      |> repo.all()
     end)
   end
 
@@ -149,13 +155,10 @@ defmodule Mneme.Knowledge do
         # Find entries matching the pattern in content
         pattern = "%#{entity}%#{relation}%"
 
-        from(e in Entry,
-          where:
-            e.scope_id == ^scope_id and
-              e.confidence > 0.1 and
-              ilike(e.content, ^pattern)
+        repo.update_all(
+          from(e in Entry, where: e.scope_id == ^scope_id and e.confidence > 0.1 and ilike(e.content, ^pattern)),
+          set: [confidence: 0.1, updated_at: DateTime.utc_now()]
         )
-        |> repo.update_all(set: [confidence: 0.1, updated_at: DateTime.utc_now()])
       end
     )
   end
@@ -212,18 +215,17 @@ defmodule Mneme.Knowledge do
     pattern = "%#{entity}%"
 
     entries =
-      from(e in Entry,
-        where:
-          e.scope_id == ^scope_id and
-            e.owner_id == ^owner_id and
-            e.entry_type != "archived" and
-            e.confidence > 0.3 and
-            ilike(e.content, ^pattern)
+      repo.all(
+        from(e in Entry,
+          where:
+            e.scope_id == ^scope_id and e.owner_id == ^owner_id and e.entry_type != "archived" and e.confidence > 0.3 and
+              ilike(e.content, ^pattern)
+        )
       )
-      |> repo.all()
 
     # Check each entry for contradictions
-    Enum.map(entries, fn entry ->
+    entries
+    |> Enum.map(fn entry ->
       case detect_contradiction(claim, entry) do
         nil -> nil
         type -> %{existing: entry.content, type: type, claim: claim}
@@ -238,9 +240,7 @@ defmodule Mneme.Knowledge do
     claim_entity = String.downcase(entity)
 
     # Skip if entry doesn't mention the claim entity
-    unless String.contains?(entry_content, claim_entity) do
-      nil
-    else
+    if String.contains?(entry_content, claim_entity) do
       claim_pred = claim[:predicate]
       entry_content = entry.content
 
@@ -260,8 +260,7 @@ defmodule Mneme.Knowledge do
 
     # Check if entry mentions a different entity doing the same thing
     potential_others =
-      ~w[Alice Bob Charlie Maya Kai Priya Alex Sam Jordan]
-      |> Enum.reject(&(String.downcase(&1) == String.downcase(entity)))
+      Enum.reject(~w[Alice Bob Charlie Maya Kai Priya Alex Sam Jordan], &(String.downcase(&1) == String.downcase(entity)))
 
     other_mentioned =
       Enum.find(potential_others, fn other ->

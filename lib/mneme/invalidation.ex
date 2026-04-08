@@ -16,7 +16,9 @@ defmodule Mneme.Invalidation do
       )
   """
 
-  alias Mneme.{Config, Knowledge, Telemetry}
+  alias Mneme.Config
+  alias Mneme.Knowledge
+  alias Mneme.Telemetry
 
   @migration_patterns [
     ~r/migrate[ds]?\s+(?:from\s+)?(\w+)\s+(?:to|with)\s+(\w+)/i,
@@ -121,9 +123,7 @@ defmodule Mneme.Invalidation do
   Detect migration patterns in recent git commits.
   """
   def detect_migrations(days \\ 7) do
-    case System.cmd("git", ["log", "--since=#{days} days", "--pretty=format:%s"],
-           stderr_to_stdout: true
-         ) do
+    case System.cmd("git", ["log", "--since=#{days} days", "--pretty=format:%s"], stderr_to_stdout: true) do
       {output, 0} ->
         output
         |> String.split("\n", trim: true)

@@ -10,6 +10,7 @@ defmodule Mneme.RetrievalCounter do
   """
 
   use GenServer
+
   alias Mneme.Config
 
   @table :mneme_retrieval_counters
@@ -21,11 +22,9 @@ defmodule Mneme.RetrievalCounter do
 
   @doc "Increment retrieval counter for an entry. O(1) operation."
   def bump(entry_id) do
-    try do
-      :ets.update_counter(@table, entry_id, {2, 1, 1, 1})
-    rescue
-      _ -> :ok
-    end
+    :ets.update_counter(@table, entry_id, {2, 1, 1, 1})
+  rescue
+    _ -> :ok
   end
 
   @doc "Increment retrieval counters for multiple entries."
@@ -52,7 +51,8 @@ defmodule Mneme.RetrievalCounter do
     ])
 
     interval =
-      Application.get_env(:mneme, :retrieval_strengthening, [])
+      :mneme
+      |> Application.get_env(:retrieval_strengthening, [])
       |> Keyword.get(:flush_interval_ms, @default_flush_interval)
 
     schedule_flush(interval)
@@ -78,7 +78,8 @@ defmodule Mneme.RetrievalCounter do
       now = DateTime.utc_now()
 
       boost_days =
-        Application.get_env(:mneme, :retrieval_strengthening, [])
+        :mneme
+        |> Application.get_env(:retrieval_strengthening, [])
         |> Keyword.get(:half_life_boost_days, 2)
 
       ids = Enum.map(entries, fn {id, _count} -> id end)

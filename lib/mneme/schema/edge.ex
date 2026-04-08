@@ -3,7 +3,10 @@ defmodule Mneme.Schema.Edge do
   Lightweight knowledge edge between entries (Tier 2).
   """
   use Ecto.Schema
+
   import Ecto.Changeset
+
+  alias Mneme.Schema.Entry
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @timestamps_opts [type: :utc_datetime_usec]
@@ -15,8 +18,8 @@ defmodule Mneme.Schema.Edge do
     field(:weight, :float, default: 1.0)
     field(:metadata, :map, default: %{})
 
-    belongs_to(:source_entry, Mneme.Schema.Entry, type: :binary_id)
-    belongs_to(:target_entry, Mneme.Schema.Entry, type: :binary_id)
+    belongs_to(:source_entry, Entry, type: :binary_id)
+    belongs_to(:target_entry, Entry, type: :binary_id)
 
     timestamps()
   end

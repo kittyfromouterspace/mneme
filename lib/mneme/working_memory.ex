@@ -97,7 +97,8 @@ defmodule Mneme.WorkingMemory do
 
   @doc "List all active scope IDs."
   def active_scopes do
-    DynamicSupervisor.which_children(working_memory_supervisor())
+    working_memory_supervisor()
+    |> DynamicSupervisor.which_children()
     |> Enum.map(fn {_, pid, _, _} ->
       case Server.scope_id(pid) do
         {:ok, scope_id} -> scope_id
@@ -116,7 +117,8 @@ defmodule Mneme.WorkingMemory do
 
   defp start_scope(scope_id) do
     max =
-      Application.get_env(:mneme, :working_memory, [])
+      :mneme
+      |> Application.get_env(:working_memory, [])
       |> Keyword.get(:max_entries_per_scope, @default_max)
 
     child_spec = {Server, scope_id: scope_id, max_entries: max}
@@ -128,7 +130,8 @@ defmodule Mneme.WorkingMemory do
   end
 
   defp whereis_scope(scope_id) do
-    Registry.lookup(working_memory_registry(), scope_id)
+    working_memory_registry()
+    |> Registry.lookup(scope_id)
     |> case do
       [{pid, _}] -> pid
       [] -> nil

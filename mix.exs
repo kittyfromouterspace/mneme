@@ -12,9 +12,9 @@ defmodule Mneme.MixProject do
       deps: deps(),
       aliases: aliases(),
       elixirc_paths: elixirc_paths(Mix.env()),
-      description:
-        "Pluggable memory engine with vector search, knowledge graphs, and LLM extraction",
-      package: package()
+      description: "Pluggable memory engine with vector search, knowledge graphs, and LLM extraction",
+      package: package(),
+      dialyzer: [ignore_warnings: ".dialyzer_ignore.exs"]
     ]
   end
 
@@ -35,7 +35,12 @@ defmodule Mneme.MixProject do
       {:pgvector, "~> 0.3"},
       {:jason, "~> 1.4"},
       {:req, "~> 0.5"},
-      {:telemetry, "~> 1.0"}
+      {:telemetry, "~> 1.0"},
+      {:ex_check, "~> 0.16", only: [:dev], runtime: false},
+      {:mix_audit, "~> 2.1", only: [:dev], runtime: false},
+      {:styler, ">= 0.11.0", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:doctor, "~> 0.22", only: [:dev], runtime: false}
     ]
   end
 
@@ -47,8 +52,8 @@ defmodule Mneme.MixProject do
 
   defp package do
     [
-      licenses: ["MIT"],
-      links: %{}
+      licenses: ["BSD-3-Clause"],
+      links: %{"GitHub" => "https://github.com/kittyfromouterspace/mneme"}
     ]
   end
 end

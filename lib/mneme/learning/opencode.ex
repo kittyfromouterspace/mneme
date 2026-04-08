@@ -13,9 +13,9 @@ defmodule Mneme.Learner.OpenCode do
       {:ok, result} = Mneme.Learner.OpenCode.run(scope_id: scope_id)
   """
 
-  alias Mneme.Telemetry
-
   @behaviour Mneme.Learner
+
+  alias Mneme.Telemetry
 
   @impl true
   def source, do: :opencode
@@ -249,9 +249,7 @@ defmodule Mneme.Learner.OpenCode do
     messages =
       data["messages"] || data["conversation"] || data["items"] || []
 
-    messages
-    |> Enum.map(&extract_message_text/1)
-    |> Enum.join("\n")
+    Enum.map_join(messages, "\n", &extract_message_text/1)
   end
 
   defp extract_messages_from_json(_), do: ""
@@ -340,18 +338,14 @@ defmodule Mneme.Learner.OpenCode do
   end
 
   defp process_conversation(conversation) do
-    case extract(conversation) do
-      {:ok, extract} ->
-        Mneme.remember(extract.content,
-          entry_type: extract.entry_type,
-          emotional_valence: extract.emotional_valence,
-          tags: extract.tags,
-          metadata: extract.metadata,
-          source: "system"
-        )
+    {:ok, extract} = extract(conversation)
 
-      result ->
-        result
-    end
+    Mneme.remember(extract.content,
+      entry_type: extract.entry_type,
+      emotional_valence: extract.emotional_valence,
+      tags: extract.tags,
+      metadata: extract.metadata,
+      source: "system"
+    )
   end
 end

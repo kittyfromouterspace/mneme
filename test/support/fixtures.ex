@@ -3,16 +3,19 @@ defmodule Mneme.Fixtures do
   Test fixtures for creating test data.
   """
 
-  alias Mneme.Schema.{Collection, Document, Entry, Edge, Chunk, Entity}
   alias Mneme.Config
+  alias Mneme.Schema.Chunk
+  alias Mneme.Schema.Collection
+  alias Mneme.Schema.Document
+  alias Mneme.Schema.Edge
+  alias Mneme.Schema.Entity
+  alias Mneme.Schema.Entry
 
   def owner_id, do: Ecto.UUID.generate()
   def scope_id, do: Ecto.UUID.generate()
 
   def collection(attrs \\ []) do
-    attrs =
-      default_collection_attrs()
-      |> Map.merge(Enum.into(attrs, %{}))
+    attrs = Map.merge(default_collection_attrs(), Map.new(attrs))
 
     {:ok, collection} =
       %Collection{}
@@ -30,7 +33,7 @@ defmodule Mneme.Fixtures do
     attrs =
       attrs
       |> Keyword.delete(:collection)
-      |> Enum.into(%{})
+      |> Map.new()
       |> Map.put(:collection_id, coll.id)
 
     {:ok, document} =
@@ -42,9 +45,7 @@ defmodule Mneme.Fixtures do
   end
 
   def entry(attrs \\ []) do
-    attrs =
-      default_entry_attrs()
-      |> Map.merge(Enum.into(attrs, %{}))
+    attrs = Map.merge(default_entry_attrs(), Map.new(attrs))
 
     {:ok, entry} =
       %Entry{}
@@ -78,7 +79,7 @@ defmodule Mneme.Fixtures do
     attrs =
       attrs
       |> Keyword.delete(:document)
-      |> Enum.into(%{})
+      |> Map.new()
       |> Map.put(:document_id, doc.id)
 
     {:ok, chunk} =
@@ -96,7 +97,7 @@ defmodule Mneme.Fixtures do
 
     attrs =
       default_entity_attrs()
-      |> Map.merge(Enum.into(attrs, %{}))
+      |> Map.merge(Map.new(attrs))
       |> Map.delete(:collection)
       |> Map.put(:collection_id, coll.id)
 

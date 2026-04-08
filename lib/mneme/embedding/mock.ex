@@ -1,4 +1,5 @@
 defmodule Mneme.Embedding.Mock do
+  @moduledoc false
   @behaviour Mneme.EmbeddingProvider
 
   @impl true
@@ -19,7 +20,8 @@ defmodule Mneme.Embedding.Mock do
     hash = :crypto.hash(:sha256, text)
     bytes = :binary.bin_to_list(hash)
 
-    Stream.cycle(bytes)
+    bytes
+    |> Stream.cycle()
     |> Stream.take(768)
     |> Enum.map(fn b -> b / 255.0 * 2.0 - 1.0 end)
   end

@@ -5,12 +5,14 @@ defmodule Mneme.DataCase do
 
   use ExUnit.CaseTemplate
 
+  alias Ecto.Adapters.SQL.Sandbox
+
   using do
     quote do
+      import Mneme.Fixtures
+
       alias Mneme.Config
       alias Mneme.Fixtures
-
-      import Mneme.Fixtures
     end
   end
 
@@ -20,7 +22,7 @@ defmodule Mneme.DataCase do
   end
 
   def setup_sandbox(tags) do
-    pid = Ecto.Adapters.SQL.Sandbox.start_owner!(Mneme.TestRepo, shared: not tags[:async])
-    on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
+    pid = Sandbox.start_owner!(Mneme.TestRepo, shared: not tags[:async])
+    on_exit(fn -> Sandbox.stop_owner(pid) end)
   end
 end

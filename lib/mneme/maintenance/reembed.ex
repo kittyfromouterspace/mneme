@@ -5,7 +5,9 @@ defmodule Mneme.Maintenance.Reembed do
   """
 
   import Ecto.Query
-  alias Mneme.{Config, EmbeddingProvider}
+
+  alias Mneme.Config
+  alias Mneme.EmbeddingProvider
 
   require Logger
 

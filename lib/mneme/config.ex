@@ -77,7 +77,7 @@ defmodule Mneme.Config do
 
         cond do
           Keyword.get(static_opts, :api_key) ->
-            Map.new(static_opts) |> Map.put(:api_key, Keyword.get(static_opts, :api_key))
+            static_opts |> Map.new() |> Map.put(:api_key, Keyword.get(static_opts, :api_key))
 
           Keyword.get(static_opts, :mock) == true ->
             Map.new(static_opts)
@@ -99,7 +99,7 @@ defmodule Mneme.Config do
         [disabled: true]
 
       %{} = creds ->
-        creds |> Map.to_list()
+        Map.to_list(creds)
     end
   end
 
@@ -112,7 +112,7 @@ defmodule Mneme.Config do
   @doc "Extraction provider options (includes llm_fn from host app)."
   def extraction_opts do
     config = Application.get_env(:mneme, :extraction, [])
-    Keyword.drop(config, [:provider])
+    Keyword.delete(config, :provider)
   end
 
   @doc "Embedding vector dimensions (resolved from credentials or static config)."

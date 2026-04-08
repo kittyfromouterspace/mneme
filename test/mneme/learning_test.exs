@@ -1,9 +1,12 @@
 defmodule Mneme.LearningTest do
   use Mneme.DataCase, async: false
 
+  alias Mneme.Learner.Git
+  alias Mneme.Learning.Pipeline
+
   describe "Mneme.Learner (behaviour)" do
     test "Git learner has correct source" do
-      assert Mneme.Learner.Git.source() == :git
+      assert Git.source() == :git
     end
   end
 
@@ -17,7 +20,7 @@ defmodule Mneme.LearningTest do
         branch: "main"
       }
 
-      {:ok, extract} = Mneme.Learner.Git.extract(commit)
+      {:ok, extract} = Git.extract(commit)
 
       assert extract.content =~ "fix: resolve bug"
       assert extract.entry_type == :observation
@@ -35,7 +38,7 @@ defmodule Mneme.LearningTest do
         branch: "main"
       }
 
-      {:ok, extract} = Mneme.Learner.Git.extract(commit)
+      {:ok, extract} = Git.extract(commit)
 
       assert extract.entry_type == :note
       assert extract.emotional_valence == :positive
@@ -50,7 +53,7 @@ defmodule Mneme.LearningTest do
         branch: "main"
       }
 
-      {:ok, extract} = Mneme.Learner.Git.extract(commit)
+      {:ok, extract} = Git.extract(commit)
 
       assert extract.emotional_valence == :negative
     end
@@ -63,7 +66,7 @@ defmodule Mneme.LearningTest do
         %{subject: "migrate from webpack to vite", sha: "2"}
       ]
 
-      patterns = Mneme.Learner.Git.detect_patterns(commits)
+      patterns = Git.detect_patterns(commits)
 
       assert is_list(patterns)
     end
@@ -71,19 +74,19 @@ defmodule Mneme.LearningTest do
 
   describe "Mneme.Learning.Pipeline" do
     test "enabled_learners returns configured learners" do
-      learners = Mneme.Learning.Pipeline.enabled_learners()
+      learners = Pipeline.enabled_learners()
       assert is_list(learners)
-      assert Mneme.Learner.Git in learners
+      assert Git in learners
     end
 
     test "enabled? returns boolean" do
-      assert is_boolean(Mneme.Learning.Pipeline.enabled?())
+      assert is_boolean(Pipeline.enabled?())
     end
 
     test "run with dry_run returns preview" do
       scope_id = Fixtures.scope_id()
 
-      result = Mneme.Learning.Pipeline.run(scope_id: scope_id, dry_run: true)
+      result = Pipeline.run(scope_id: scope_id, dry_run: true)
 
       assert is_tuple(result)
     end
@@ -92,9 +95,9 @@ defmodule Mneme.LearningTest do
       scope_id = Fixtures.scope_id()
 
       result =
-        Mneme.Learning.Pipeline.run(
+        Pipeline.run(
           scope_id: scope_id,
-          sources: [Mneme.Learner.Git],
+          sources: [Git],
           since: "7 days ago"
         )
 

@@ -19,7 +19,8 @@ defmodule Mneme.Handoff do
       {:ok, handoff} = Mneme.Handoff.get(workspace_id)
   """
 
-  alias Mneme.{Config, Telemetry}
+  alias Mneme.Config
+  alias Mneme.Telemetry
 
   @doc """
   Create a handoff for a scope.

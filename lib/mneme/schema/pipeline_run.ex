@@ -3,6 +3,7 @@ defmodule Mneme.Schema.PipelineRun do
   Tracks pipeline execution: status, step details, cost, and timing.
   """
   use Ecto.Schema
+
   import Ecto.Changeset
 
   @primary_key {:id, :binary_id, autogenerate: true}

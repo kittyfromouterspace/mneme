@@ -115,8 +115,8 @@ defmodule Mneme.ConflictDetection do
     if size_a == 0 and size_b == 0 do
       1.0
     else
-      intersection = MapSet.intersection(set_a, set_b) |> MapSet.size()
-      union = MapSet.union(set_a, set_b) |> MapSet.size()
+      intersection = set_a |> MapSet.intersection(set_b) |> MapSet.size()
+      union = set_a |> MapSet.union(set_b) |> MapSet.size()
 
       if union == 0 do
         0.0
@@ -143,8 +143,8 @@ defmodule Mneme.ConflictDetection do
     if size_a == 0 and size_b == 0 do
       0.0
     else
-      intersection = MapSet.intersection(set_a, set_b) |> MapSet.size()
-      union = MapSet.union(set_a, set_b) |> MapSet.size()
+      intersection = set_a |> MapSet.intersection(set_b) |> MapSet.size()
+      union = set_a |> MapSet.union(set_b) |> MapSet.size()
       intersection / union
     end
   end
@@ -165,7 +165,7 @@ defmodule Mneme.ConflictDetection do
          ) do
       {:ok, %{rows: rows, columns: columns}} ->
         Enum.map(rows, fn row ->
-          map = Enum.zip(columns, row) |> Map.new()
+          map = columns |> Enum.zip(row) |> Map.new()
 
           tags =
             case map["tags_json"] do
