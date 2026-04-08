@@ -4,11 +4,7 @@ Pluggable memory engine for Elixir applications. Provides document ingestion wit
 
 ## Inspiration
 
-Mneme draws inspiration from [MemPalace](https://github.com/milla-jovovich/mempalace), an open-source AI memory system that achieved 96.6% on the LongMemEval benchmark. Key concepts adapted for Mneme:
-
-- **LLM-free memory classification** — Regex-based categorization of memories into types (decisions, preferences, milestones, problems, emotional) without calling an LLM
-- **KG-aware contradiction detection** — Check new entries against existing knowledge to flag conflicts (attribution, status)
-- **Enhanced metadata filtering** — Wing/room-style filtering for improved retrieval accuracy
+Mneme builds on research from [MemPalace](https://github.com/milla-jovovich/mempalace), [HIPPO Memory](https://github.com/kitfunso/hippo-memory) and [Cognee](https://docs.cognee.ai) among others.
 
 ## Architecture
 
@@ -60,6 +56,7 @@ mix mneme.gen.migration --dimensions 768
 ```
 
 Options:
+
 - `--dimensions` — Embedding vector dimensions (default: 768). Must match your embedding model:
   - `768` for Google text-embedding-004, Ollama nomic-embed-text
   - `1536` for OpenAI text-embedding-3-small
@@ -414,6 +411,7 @@ Edge relation types: `leads_to`, `supports`, `contradicts`, `derived_from`, `sup
 ### Dual Identifiers
 
 All schemas carry both `owner_id` and `scope_id`:
+
 - **`owner_id`** — The user who owns the data. Used for cross-scope queries ("everything this user knows").
 - **`scope_id`** — The workspace/project/collection scope. Used for scoped queries ("everything in this workspace").
 
