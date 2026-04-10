@@ -127,6 +127,11 @@ defmodule Mneme.Config do
     end
   end
 
+  @doc "The configured database adapter module."
+  def adapter do
+    Application.get_env(:mneme, :database_adapter, Mneme.DatabaseAdapter.Postgres)
+  end
+
   @doc "Check if embedding is available."
   def embedding_enabled? do
     embedding_provider() != nil && embedding_credentials() != :disabled

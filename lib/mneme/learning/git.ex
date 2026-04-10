@@ -174,7 +174,8 @@ defmodule Mneme.Learner.Git do
     end
   end
 
-  defp detect_type(message) do
+  @doc "Classify a commit message into a type atom."
+  def detect_type(message) do
     low = String.downcase(message)
 
     cond do

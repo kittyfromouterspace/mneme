@@ -1,7 +1,7 @@
 defmodule Mneme.MixProject do
   use Mix.Project
 
-  @version "0.1.0"
+  @version "0.2.0"
 
   def project do
     [
@@ -12,7 +12,7 @@ defmodule Mneme.MixProject do
       deps: deps(),
       aliases: aliases(),
       elixirc_paths: elixirc_paths(Mix.env()),
-      description: "Pluggable memory engine with vector search, knowledge graphs, and LLM extraction",
+      description: "Pluggable memory engine with vector search, knowledge graphs, and LLM extraction. Now supports PostgreSQL and libSQL/SQLite.",
       package: package(),
       dialyzer: [ignore_warnings: ".dialyzer_ignore.exs"]
     ]
@@ -30,12 +30,21 @@ defmodule Mneme.MixProject do
 
   defp deps do
     [
+      # Core dependencies
       {:ecto_sql, "~> 3.12"},
-      {:postgrex, "~> 0.19"},
-      {:pgvector, "~> 0.3"},
       {:jason, "~> 1.4"},
       {:req, "~> 0.5"},
       {:telemetry, "~> 1.0"},
+
+      # Database adapters (optional - user chooses one)
+      # PostgreSQL support
+      {:postgrex, "~> 0.19", optional: true},
+      # pgvector for PostgreSQL vector support
+      {:pgvector, "~> 0.3", optional: true},
+      # libSQL support (recommended for new installations)
+      {:ecto_libsql, "~> 0.9", optional: true},
+
+      # Dev/Test tooling
       {:ex_check, "~> 0.16", only: [:dev], runtime: false},
       {:mix_audit, "~> 2.1", only: [:dev], runtime: false},
       {:styler, ">= 0.11.0", only: [:dev, :test], runtime: false},

@@ -24,3 +24,7 @@
 - `owner_id` and `scope_id` appear on all schemas. `owner_id` is the user who owns the data; `scope_id` is the workspace/project.
 - All API functions return `{:ok, _}` or `{:error, reason}` tuples; never raise on expected error paths.
 - Configuration is always via `config :mneme, ...` in the host application. No compile-time credentials; use `credentials_fn` for runtime resolution.
+
+## Versioning
+
+This library is consumed as a git dependency by Worth. When adding new functionality or making breaking changes, you **must** create a new git tag (e.g., `v0.2.0`) so that Worth's `mix.exs` can pin to a specific version. Follow semantic versioning.
