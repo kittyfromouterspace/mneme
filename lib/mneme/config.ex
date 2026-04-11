@@ -41,6 +41,8 @@ defmodule Mneme.Config do
         ]
   """
 
+  alias Mneme.Embedding.Local
+
   @doc "The Ecto Repo module provided by the host app."
   def repo do
     Application.fetch_env!(:mneme, :repo)
@@ -51,10 +53,15 @@ defmodule Mneme.Config do
     Application.get_env(:mneme, :table_prefix, "mneme_")
   end
 
-  @doc "Embedding provider module (implements Mneme.EmbeddingProvider)."
+  @doc """
+  Embedding provider module (implements Mneme.EmbeddingProvider).
+
+  Defaults to `Mneme.Embedding.Local` (runs locally via Bumblebee)
+  when no provider is explicitly configured.
+  """
   def embedding_provider do
     config = Application.get_env(:mneme, :embedding, [])
-    Keyword.get(config, :provider)
+    Keyword.get(config, :provider, Local)
   end
 
   @doc """
@@ -76,6 +83,9 @@ defmodule Mneme.Config do
         static_opts = Keyword.drop(config, [:provider, :credentials_fn])
 
         cond do
+          embedding_provider() == Local ->
+            Map.new(static_opts)
+
           Keyword.get(static_opts, :api_key) ->
             static_opts |> Map.new() |> Map.put(:api_key, Keyword.get(static_opts, :api_key))
 
@@ -115,7 +125,7 @@ defmodule Mneme.Config do
     Keyword.delete(config, :provider)
   end
 
-  @doc "Embedding vector dimensions (resolved from credentials or static config)."
+  @doc "Embedding vector dimensions (resolved from credentials, static config, or provider default)."
   def dimensions do
     case embedding_credentials() do
       %{dimensions: d} when is_integer(d) ->
@@ -123,7 +133,18 @@ defmodule Mneme.Config do
 
       _ ->
         config = Application.get_env(:mneme, :embedding, [])
-        Keyword.get(config, :dimensions, 1536)
+
+        Keyword.get(config, :dimensions, provider_default_dimensions())
+    end
+  end
+
+  defp provider_default_dimensions do
+    provider = embedding_provider()
+
+    if function_exported?(provider, :dimensions, 0) do
+      provider.dimensions()
+    else
+      1536
     end
   end
 
