@@ -185,7 +185,8 @@ defmodule Mneme.DatabaseAdapter.LibSQL do
       placeholders_list = String.split(placeholders, ", ")
 
       updated_placeholders =
-        List.update_at(placeholders_list, idx, fn _ -> "vector32(?)" end)
+        placeholders_list
+        |> List.update_at(idx, fn _ -> "vector32(?)" end)
         |> Enum.join(", ")
 
       "INSERT INTO #{table} (#{col_names}) VALUES (#{updated_placeholders})"

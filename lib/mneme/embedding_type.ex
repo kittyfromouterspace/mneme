@@ -12,6 +12,7 @@ defmodule Mneme.EmbeddingType do
   use Ecto.Type
 
   alias Mneme.Config
+  alias Pgvector.Ecto.Vector
 
   @impl true
   def type do
@@ -54,8 +55,8 @@ defmodule Mneme.EmbeddingType do
     adapter = Config.adapter()
 
     if adapter.dialect() == :postgres do
-      if Code.ensure_loaded?(Pgvector.Ecto.Vector) do
-        pgvector_mod = Pgvector.Ecto.Vector
+      if Code.ensure_loaded?(Vector) do
+        pgvector_mod = Vector
         {:ok, struct(pgvector_mod, %{embedding: data})}
       else
         {:ok, adapter.format_embedding(data)}
