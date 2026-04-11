@@ -15,7 +15,7 @@ defmodule Mneme.StackDetectorTest do
 
       transition = Enum.find(transitions, &(&1.from == "webpack" and &1.to == "vite"))
 
-      assert transition != nil
+      assert transition
       assert transition.type == :deprecation
       assert transition.category == :build_tool
     end
@@ -29,7 +29,7 @@ defmodule Mneme.StackDetectorTest do
 
       transition = Enum.find(transitions, &(&1.from == "jest" and &1.to == "vitest"))
 
-      assert transition != nil
+      assert transition
       assert transition.category == :test_framework
     end
 
@@ -42,7 +42,7 @@ defmodule Mneme.StackDetectorTest do
 
       transition = Enum.find(transitions, &(&1.from == "babel" and &1.to == "esbuild"))
 
-      assert transition != nil
+      assert transition
       assert transition.category == :transpiler
     end
 

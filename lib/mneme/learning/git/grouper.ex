@@ -58,9 +58,7 @@ defmodule Mneme.Learner.Git.Grouper do
       |> Enum.map(&{&1, extract_topic(&1)})
       |> group_by_topic()
 
-    group_insights =
-      grouped
-      |> Enum.map(&build_group_insight/1)
+    group_insights = Enum.map(grouped, &build_group_insight/1)
 
     singleton_insights =
       singletons
@@ -105,7 +103,8 @@ defmodule Mneme.Learner.Git.Grouper do
       |> Enum.split_with(fn {_topic, commits} -> length(commits) >= 2 end)
 
     singletons =
-      elem(grouped, 1)
+      grouped
+      |> elem(1)
       |> Enum.flat_map(fn {topic, commits} ->
         Enum.map(commits, fn commit -> {commit, topic} end)
       end)
@@ -123,16 +122,17 @@ defmodule Mneme.Learner.Git.Grouper do
     type_counts = Enum.frequencies(types)
 
     content =
-      [
-        "Development activity in #{topic} (#{length(commits)} commits):",
-        "",
-        "Breakdown:",
-        format_type_counts(type_counts),
-        "",
-        "Commits:"
-        | format_commit_list(commits)
-      ]
-      |> Enum.join("\n")
+      Enum.join(
+        [
+          "Development activity in #{topic} (#{length(commits)} commits):",
+          "",
+          "Breakdown:",
+          format_type_counts(type_counts),
+          "",
+          "Commits:" | format_commit_list(commits)
+        ],
+        "\n"
+      )
 
     summary = "#{topic}: #{length(commits)} commits — #{summarize_types(type_counts)}"
 
@@ -187,8 +187,7 @@ defmodule Mneme.Learner.Git.Grouper do
   defp format_type_counts(type_counts) do
     type_counts
     |> Enum.sort_by(fn {_type, count} -> -count end)
-    |> Enum.map(fn {type, count} -> "  - #{count}x #{type}" end)
-    |> Enum.join("\n")
+    |> Enum.map_join("\n", fn {type, count} -> "  - #{count}x #{type}" end)
   end
 
   defp format_commit_list(commits) do
@@ -208,8 +207,7 @@ defmodule Mneme.Learner.Git.Grouper do
     type_counts
     |> Enum.sort_by(fn {_type, count} -> -count end)
     |> Enum.take(3)
-    |> Enum.map(fn {type, count} -> "#{count} #{type}#{if count > 1, do: "s", else: ""}" end)
-    |> Enum.join(", ")
+    |> Enum.map_join(", ", fn {type, count} -> "#{count} #{type}#{if count > 1, do: "s", else: ""}" end)
   end
 
   defp infer_valence(types) do

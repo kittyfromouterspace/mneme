@@ -126,7 +126,7 @@ defmodule Mneme.Learner.Git.StackDetector do
         info -> [{tech_id, %{category: info.category, evidence: items}}]
       end
     end)
-    |> Enum.into(%{})
+    |> Map.new()
   end
 
   @doc """
@@ -150,9 +150,7 @@ defmodule Mneme.Learner.Git.StackDetector do
   config file diffs.
   """
   def detect_transitions_from_commits(commits) do
-    commit_transitions =
-      commits
-      |> Enum.flat_map(&scan_commit_for_transition/1)
+    commit_transitions = Enum.flat_map(commits, &scan_commit_for_transition/1)
 
     config_transitions = detect_transitions_from_git_log(commits)
 
@@ -169,7 +167,7 @@ defmodule Mneme.Learner.Git.StackDetector do
         info -> [{tech_id, %{category: info.category, evidence: items}}]
       end
     end)
-    |> Enum.into(%{})
+    |> Map.new()
   end
 
   defp find_transitions(past, current) do
@@ -213,18 +211,11 @@ defmodule Mneme.Learner.Git.StackDetector do
   end
 
   defp collect_evidence do
-    (package_json_evidence() ++
-       mix_exs_evidence() ++
-       config_file_evidence() ++
-       docker_evidence())
-    |> group_by_technology()
+    group_by_technology(package_json_evidence() ++ mix_exs_evidence() ++ config_file_evidence() ++ docker_evidence())
   end
 
   defp collect_evidence_at(since) do
-    (package_json_at(since) ++
-       config_files_at(since) ++
-       docker_evidence())
-    |> group_by_technology()
+    group_by_technology(package_json_at(since) ++ config_files_at(since) ++ docker_evidence())
   end
 
   defp collect_evidence_from_git_log(commits) do
@@ -234,8 +225,7 @@ defmodule Mneme.Learner.Git.StackDetector do
   end
 
   defp group_by_technology(evidence_list) do
-    evidence_list
-    |> Enum.group_by(fn {tech_id, _} -> tech_id end, fn {_, item} -> item end)
+    Enum.group_by(evidence_list, fn {tech_id, _} -> tech_id end, fn {_, item} -> item end)
   end
 
   defp package_json_evidence do
@@ -274,14 +264,13 @@ defmodule Mneme.Learner.Git.StackDetector do
   defp from_deps(deps) do
     dep_names = Map.keys(deps)
 
-    @technology_map
-    |> Enum.flat_map(fn {tech_id, %{names: names}} ->
+    Enum.flat_map(@technology_map, fn {tech_id, %{names: names}} ->
       found = Enum.filter(names, &(&1 in dep_names))
 
-      if found != [] do
-        [{to_string(tech_id), "dependency: #{Enum.join(found, ", ")}"}]
-      else
+      if found == [] do
         []
+      else
+        [{to_string(tech_id), "dependency: #{Enum.join(found, ", ")}"}]
       end
     end)
   end
@@ -311,7 +300,7 @@ defmodule Mneme.Learner.Git.StackDetector do
   end
 
   defp from_dev_dep_presence(dev_deps) do
-    dep_names = Map.keys(dev_deps) |> Enum.map(&String.downcase/1)
+    dep_names = dev_deps |> Map.keys() |> Enum.map(&String.downcase/1)
 
     checks = [
       {"typescript", fn names -> "typescript" in names end},
@@ -438,7 +427,7 @@ defmodule Mneme.Learner.Git.StackDetector do
         info -> [{tech_id, %{category: info.category, evidence: items}}]
       end
     end)
-    |> Enum.into(%{})
+    |> Map.new()
     |> then(fn stack ->
       current = detect_current()
       find_transitions(stack, current)
@@ -448,8 +437,7 @@ defmodule Mneme.Learner.Git.StackDetector do
   defp scan_commit_for_transition(commit) do
     subject = String.downcase(commit.subject)
 
-    @category_transitions
-    |> Enum.flat_map(fn {category, transitions} ->
+    Enum.flat_map(@category_transitions, fn {category, transitions} ->
       Enum.flat_map(transitions, fn {from, to} ->
         cond do
           String.contains?(subject, "migrate") and
@@ -501,8 +489,7 @@ defmodule Mneme.Learner.Git.StackDetector do
   defp scan_commit_for_evidence(commit) do
     subject = String.downcase(commit.subject)
 
-    @technology_map
-    |> Enum.flat_map(fn {tech_id, _info} ->
+    Enum.flat_map(@technology_map, fn {tech_id, _info} ->
       tech_str = to_string(tech_id)
 
       if String.contains?(subject, tech_str) do
@@ -514,8 +501,7 @@ defmodule Mneme.Learner.Git.StackDetector do
   end
 
   defp deduplicate_transitions(transitions) do
-    transitions
-    |> Enum.uniq_by(fn t -> {t.from, t.to} end)
+    Enum.uniq_by(transitions, fn t -> {t.from, t.to} end)
   end
 
   defp glob_exists?(pattern) do
