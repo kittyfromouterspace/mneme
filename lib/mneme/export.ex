@@ -58,12 +58,13 @@ defmodule Mneme.Export do
     tables = Keyword.get(opts, :tables, @tables)
     batch_size = Keyword.get(opts, :batch_size, 1000)
 
-    File.open(path, [:write, :utf8], fn file ->
+    path
+    |> File.open([:write, :utf8], fn file ->
       # Write header
       header = %{
         type: "header",
         version: @version,
-        exported_at: DateTime.utc_now() |> DateTime.to_iso8601(),
+        exported_at: DateTime.to_iso8601(DateTime.utc_now()),
         adapter: Config.adapter() |> Module.split() |> List.last(),
         dimensions: Config.dimensions()
       }
@@ -109,7 +110,8 @@ defmodule Mneme.Export do
   def export_table(table, path, opts \\ []) do
     batch_size = Keyword.get(opts, :batch_size, 1000)
 
-    File.open(path, [:write, :utf8], fn file ->
+    path
+    |> File.open([:write, :utf8], fn file ->
       count = export_table_to_file(file, table, batch_size, opts)
       {:ok, %{table: table, rows: count}}
     end)
@@ -183,11 +185,9 @@ defmodule Mneme.Export do
 
   # Transform special types for JSON serialization
   defp transform_row(row) when is_map(row) do
-    row
-    |> Enum.map(fn {key, value} ->
+    Map.new(row, fn {key, value} ->
       {key, transform_value(value)}
     end)
-    |> Map.new()
   end
 
   # Handle Ecto.UUID binary format (for PostgreSQL)

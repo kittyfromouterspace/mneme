@@ -31,7 +31,9 @@ defmodule Mneme.Maintenance.Decay do
           where:
             e.entry_type != "archived" and (is_nil(e.last_accessed_at) or e.last_accessed_at < ^cutoff) and
               e.access_count < ^min_access_count
-        ), set: [entry_type: "archived", updated_at: DateTime.utc_now()])
+        ),
+        set: [entry_type: "archived", updated_at: DateTime.utc_now()]
+      )
 
     duration = System.monotonic_time() - start_time
 

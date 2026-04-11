@@ -301,7 +301,9 @@ defmodule Mneme.MigrationGenerator do
   end
 
   defp generate_vector_index(adapter, table, column, _dimensions) do
-    adapter.vector_index_sql(String.to_atom(table), column, [])
+    table
+    |> String.to_atom()
+    |> adapter.vector_index_sql(column, [])
     |> case do
       sql when is_binary(sql) ->
         if adapter.dialect() == :postgres do

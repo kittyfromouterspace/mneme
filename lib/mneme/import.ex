@@ -54,7 +54,8 @@ defmodule Mneme.Import do
 
     # Process file in streaming fashion
     result =
-      File.stream!(path, :line)
+      path
+      |> File.stream!(:line)
       |> Stream.map(&String.trim/1)
       |> Stream.reject(&(&1 == ""))
       |> Stream.map(&Jason.decode!/1)
@@ -87,7 +88,8 @@ defmodule Mneme.Import do
     stats = %{imported: 0, skipped: 0, errors: [], table: table}
 
     result =
-      File.stream!(path, :line)
+      path
+      |> File.stream!(:line)
       |> Stream.map(&String.trim/1)
       |> Stream.reject(&(&1 == ""))
       |> Stream.map(&Jason.decode!/1)
@@ -114,34 +116,33 @@ defmodule Mneme.Import do
   Returns metadata about the export file and any validation errors.
   """
   def validate(path) do
-    try do
-      File.stream!(path, :line)
-      |> Stream.map(&String.trim/1)
-      |> Stream.reject(&(&1 == ""))
-      |> Stream.map(&Jason.decode!/1)
-      |> Enum.reduce(
-        %{valid: true, errors: [], tables: MapSet.new(), rows: 0, header: nil, footer: nil},
-        fn record, acc ->
-          validate_record(record, acc)
-        end
-      )
-      |> case do
-        %{valid: true} = result ->
-          {:ok,
-           %{
-             tables: MapSet.to_list(result.tables),
-             total_rows: result.rows,
-             header: result.header,
-             footer: result.footer
-           }}
-
-        %{valid: false, errors: errors} ->
-          {:error, %{message: "Validation failed", errors: errors}}
+    path
+    |> File.stream!(:line)
+    |> Stream.map(&String.trim/1)
+    |> Stream.reject(&(&1 == ""))
+    |> Stream.map(&Jason.decode!/1)
+    |> Enum.reduce(
+      %{valid: true, errors: [], tables: MapSet.new(), rows: 0, header: nil, footer: nil},
+      fn record, acc ->
+        validate_record(record, acc)
       end
-    rescue
-      e ->
-        {:error, %{message: "Failed to read file", error: Exception.message(e)}}
+    )
+    |> case do
+      %{valid: true} = result ->
+        {:ok,
+         %{
+           tables: MapSet.to_list(result.tables),
+           total_rows: result.rows,
+           header: result.header,
+           footer: result.footer
+         }}
+
+      %{valid: false, errors: errors} ->
+        {:error, %{message: "Validation failed", errors: errors}}
     end
+  rescue
+    e ->
+      {:error, %{message: "Failed to read file", error: Exception.message(e)}}
   end
 
   # ── Private Functions ─────────────────────────────────────────────────
@@ -234,11 +235,9 @@ defmodule Mneme.Import do
   end
 
   defp transform_for_insert(data, adapter) do
-    data
-    |> Enum.map(fn {key, value} ->
+    Map.new(data, fn {key, value} ->
       {key, transform_value_for_insert(key, value, adapter)}
     end)
-    |> Map.new()
   end
 
   # Handle embedding fields specially

@@ -68,8 +68,6 @@ defmodule Mneme.EmbeddingProvider do
       {:ok, provider, merged_opts} ->
         if function_exported?(provider, :model_id, 1) do
           provider.model_id(merged_opts)
-        else
-          nil
         end
 
       _ ->
