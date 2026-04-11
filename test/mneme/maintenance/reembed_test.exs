@@ -35,7 +35,7 @@ defmodule Mneme.Maintenance.ReembedTest do
 
       reloaded = Config.repo().get(Entry, entry.id)
       assert reloaded.embedding_model_id == "test-model-x"
-      refute is_nil(reloaded.embedding)
+      assert reloaded.embedding
     end
 
     test "supports {:stale_model, current_id} scope" do
