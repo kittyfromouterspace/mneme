@@ -95,9 +95,9 @@ defmodule Mneme.Learner.CodingAgent.ClaudeCode do
     description = Map.get(fm, "description", "")
 
     content =
-      if description != "",
-        do: "#{name}\n\n#{description}\n\n#{body}",
-        else: "#{name}\n\n#{body}"
+      if description == "",
+        do: "#{name}\n\n#{body}",
+        else: "#{name}\n\n#{description}\n\n#{body}"
 
     {:ok,
      %{
@@ -108,7 +108,7 @@ defmodule Mneme.Learner.CodingAgent.ClaudeCode do
        metadata: %{source: :claude_code, memory_type: mem_type, memory_name: name, project: event.project},
        half_life_days: half_life,
        confidence: 0.95,
-       summary: if(description != "", do: description, else: name)
+       summary: if(description == "", do: name, else: description)
      }}
   end
 
@@ -286,7 +286,7 @@ defmodule Mneme.Learner.CodingAgent.ClaudeCode do
     case File.stat(path) do
       {:ok, stat} ->
         file_dt = mtime_to_datetime(stat.mtime)
-        DateTime.compare(file_dt, since_dt) == :gt
+        DateTime.after?(file_dt, since_dt)
 
       _ ->
         true

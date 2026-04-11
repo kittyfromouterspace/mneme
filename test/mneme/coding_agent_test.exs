@@ -2,10 +2,10 @@ defmodule Mneme.CodingAgentTest do
   use ExUnit.Case, async: true
 
   alias Mneme.Learner.CodingAgent
+  alias Mneme.Learner.CodingAgent.ClaudeCode
   alias Mneme.Learner.CodingAgent.Codex
   alias Mneme.Learner.CodingAgent.Gemini
   alias Mneme.Learner.CodingAgent.OpenCode
-  alias Mneme.Learner.CodingAgent.ClaudeCode
 
   describe "CodingAgent" do
     test "source is :coding_agents" do
@@ -48,9 +48,7 @@ defmodule Mneme.CodingAgentTest do
     end
 
     test "all providers return unique agent names" do
-      names =
-        CodingAgent.providers()
-        |> Enum.map(& &1.agent_name())
+      names = Enum.map(CodingAgent.providers(), & &1.agent_name())
 
       assert length(names) == length(Enum.uniq(names))
     end
@@ -175,7 +173,7 @@ defmodule Mneme.CodingAgentTest do
       insights = OpenCode.summarize(events, "scope")
 
       worth = Enum.find(insights, &String.contains?(&1.content, "worth"))
-      assert worth != nil
+      assert worth
       assert worth.metadata[:session_count] == 2
     end
   end

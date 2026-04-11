@@ -10,7 +10,7 @@ defmodule Mneme.Learner.CodingAgent.Util do
           |> String.split("\n")
           |> Enum.map(&parse_yaml_line/1)
           |> Enum.reject(&is_nil/1)
-          |> Enum.into(%{})
+          |> Map.new()
 
         {frontmatter, String.trim(body)}
 
@@ -108,8 +108,7 @@ defmodule Mneme.Learner.CodingAgent.Util do
   end
 
   defp pull_user_text(content) when is_list(content) do
-    content
-    |> Enum.flat_map(fn
+    Enum.flat_map(content, fn
       %{"type" => "text", "text" => text} -> pull_user_text(text)
       _ -> []
     end)

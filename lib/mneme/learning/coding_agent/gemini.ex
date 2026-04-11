@@ -128,7 +128,7 @@ defmodule Mneme.Learner.CodingAgent.Gemini do
         {{y, m, d}, {h, min, s}} = stat.mtime
         {:ok, ndt} = NaiveDateTime.new(y, m, d, h, min, s)
         file_dt = DateTime.from_naive!(ndt, "Etc/UTC")
-        DateTime.compare(file_dt, since_dt) == :gt
+        DateTime.after?(file_dt, since_dt)
 
       _ ->
         true

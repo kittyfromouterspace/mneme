@@ -112,8 +112,7 @@ defmodule Mneme.Learner.CodingAgent do
 
   @doc "List available providers and their status."
   def status do
-    @providers
-    |> Enum.map(fn mod ->
+    Enum.map(@providers, fn mod ->
       {mod.agent_name(), mod.available?(), mod.data_paths()}
     end)
   end

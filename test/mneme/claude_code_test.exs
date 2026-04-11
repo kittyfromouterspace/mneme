@@ -258,7 +258,7 @@ defmodule Mneme.ClaudeCodeProviderTest do
           |> String.split("\n")
           |> Enum.map(&parse_yaml_line/1)
           |> Enum.reject(&is_nil/1)
-          |> Enum.into(%{})
+          |> Map.new()
 
         {frontmatter, String.trim(body)}
 

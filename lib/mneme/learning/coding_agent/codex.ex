@@ -75,7 +75,9 @@ defmodule Mneme.Learner.CodingAgent.Codex do
   # --- extract ---
 
   defp extract_instructions(%{content: content}) do
-    if content != "" do
+    if content == "" do
+      {:skip, "empty instructions"}
+    else
       {:ok,
        %{
          content: "Codex user instructions:\n\n#{content}",
@@ -87,8 +89,6 @@ defmodule Mneme.Learner.CodingAgent.Codex do
          confidence: 0.85,
          summary: "Codex global instructions"
        }}
-    else
-      {:skip, "empty instructions"}
     end
   end
 
@@ -149,7 +149,7 @@ defmodule Mneme.Learner.CodingAgent.Codex do
                 case File.stat(path) do
                   {:ok, stat} ->
                     file_dt = mtime_to_datetime(stat.mtime)
-                    DateTime.compare(file_dt, dt) == :gt
+                    DateTime.after?(file_dt, dt)
 
                   _ ->
                     true
@@ -188,7 +188,8 @@ defmodule Mneme.Learner.CodingAgent.Codex do
         end
 
       session_id =
-        Path.basename(path, ".jsonl")
+        path
+        |> Path.basename(".jsonl")
         |> String.replace(~r/^rollout-/, "")
         |> String.replace(~r/^.*T/, "")
 
@@ -218,27 +219,29 @@ defmodule Mneme.Learner.CodingAgent.Codex do
   defp fetch_history(base) do
     path = Path.join(base, "history.jsonl")
 
-    with {:ok, content} <- Util.read_file(path) do
-      content
-      |> Util.extract_jsonl_lines()
-      |> Enum.map(fn obj ->
-        text = Map.get(obj, "text", "")
-        session_id = Map.get(obj, "session_id", "unknown")
+    case Util.read_file(path) do
+      {:ok, content} ->
+        content
+        |> Util.extract_jsonl_lines()
+        |> Enum.map(fn obj ->
+          text = Map.get(obj, "text", "")
+          session_id = Map.get(obj, "session_id", "unknown")
 
-        if text != "" do
-          %{
-            agent: :codex,
-            source: :history_prompt,
-            text: text,
-            session_id: session_id,
-            project: "unknown",
-            user_prompts: [text]
-          }
-        end
-      end)
-      |> Enum.reject(&is_nil/1)
-    else
-      _ -> []
+          if text != "" do
+            %{
+              agent: :codex,
+              source: :history_prompt,
+              text: text,
+              session_id: session_id,
+              project: "unknown",
+              user_prompts: [text]
+            }
+          end
+        end)
+        |> Enum.reject(&is_nil/1)
+
+      _ ->
+        []
     end
   end
 
