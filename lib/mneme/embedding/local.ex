@@ -55,7 +55,7 @@ defmodule Mneme.Embedding.Local do
   @model_id "all-MiniLM-L6-v2"
 
   @doc "The registered name of the Nx.Serving process."
-  def serving_name, do: {__MODULE__, :serving}
+  def serving_name, do: __MODULE__.Serving
 
   @doc "Returns the embedding dimensions for the configured model."
   def dimensions, do: @dimensions
