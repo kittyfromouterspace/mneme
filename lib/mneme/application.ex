@@ -34,8 +34,7 @@ defmodule Mneme.Application do
           [child | children]
 
         {:error, reason} ->
-          Logger.warning("Mneme: local embedding provider selected but could not initialize: #{inspect(reason)}")
-
+          Logger.warning("Mneme: local embedding serving could not initialize: #{inspect(reason)}")
           children
       end
     else

@@ -85,13 +85,75 @@ defmodule Mneme.Embedding.Local do
 
     with {:ok, model_info} <- Bumblebee.load_model({:hf, model_id}),
          {:ok, tokenizer} <- Bumblebee.load_tokenizer({:hf, model_id}) do
-      serving =
-        Bumblebee.Text.text_embedding(model_info, tokenizer,
-          output_pool: :mean_pooling,
-          embedding_processor: :l2_norm,
-          compile: compile,
-          defn_options: defn_options
+      # Build the serving manually to avoid Bumblebee's output_pool rank check,
+      # which fails for models that already output pooled (rank-2) embeddings.
+      {_init_fun, encoder} = Axon.build(model_info.model)
+
+      embedding_fun = fn params, inputs ->
+        output = encoder.(params, inputs)
+
+        embedding =
+          case output do
+            %{pooled_state: pooled} -> pooled
+            %{hidden_state: hidden} -> hidden
+            other -> other
+          end
+
+        Bumblebee.Utils.Nx.normalize(embedding)
+      end
+
+      batch_size = Keyword.get(compile, :batch_size, 32)
+      sequence_length = Keyword.get(compile, :sequence_length, 128)
+
+      tokenizer =
+        Bumblebee.configure(tokenizer,
+          length: sequence_length,
+          return_token_type_ids: false
         )
+
+      serving =
+        Nx.Serving.new(
+          fn _batch_key, defn_options ->
+            embedding_fun =
+              Nx.Defn.compile(
+                embedding_fun,
+                [
+                  model_info.params,
+                  %{
+                    "input_ids" => Nx.template({batch_size, sequence_length}, :u32),
+                    "attention_mask" => Nx.template({batch_size, sequence_length}, :u32)
+                  }
+                ],
+                defn_options
+              )
+
+            fn inputs ->
+              inputs = Bumblebee.Shared.maybe_pad(inputs, batch_size)
+              embedding_fun.(model_info.params, inputs)
+              |> Bumblebee.Shared.serving_post_computation()
+            end
+          end,
+          defn_options
+        )
+        |> Nx.Serving.batch_size(batch_size)
+        |> Nx.Serving.client_preprocessing(fn input ->
+          {texts, multi?} =
+            Bumblebee.Shared.validate_serving_input!(input, &Bumblebee.Shared.validate_string/1)
+
+          inputs =
+            Nx.with_default_backend(Nx.BinaryBackend, fn ->
+              Bumblebee.apply_tokenizer(tokenizer, texts)
+            end)
+
+          batch = [inputs] |> Nx.Batch.concatenate()
+          {batch, multi?}
+        end)
+        |> Nx.Serving.client_postprocessing(fn {embeddings, _metadata}, multi? ->
+          for embedding <- Bumblebee.Utils.Nx.batch_to_list(embeddings) do
+            %{embedding: embedding}
+          end
+          |> Bumblebee.Shared.normalize_output(multi?)
+        end)
 
       {:ok, serving}
     end
