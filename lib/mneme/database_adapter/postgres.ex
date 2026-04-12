@@ -17,8 +17,6 @@ defmodule Mneme.DatabaseAdapter.Postgres do
 
   @behaviour Mneme.DatabaseAdapter
 
-  alias Pgvector.Ecto.Vector
-
   @impl true
   def vector_type(dimensions) do
     "vector(#{dimensions})"
@@ -26,7 +24,7 @@ defmodule Mneme.DatabaseAdapter.Postgres do
 
   @impl true
   def vector_ecto_type do
-    Vector
+    if Code.ensure_loaded?(Pgvector.Ecto.Vector), do: Pgvector.Ecto.Vector, else: :string
   end
 
   @impl true
@@ -106,7 +104,7 @@ defmodule Mneme.DatabaseAdapter.Postgres do
   end
 
   @impl true
-  def parse_embedding(%{__struct__: Vector, embedding: embedding}) do
+  def parse_embedding(%{embedding: embedding}) when is_list(embedding) do
     embedding
   end
 

@@ -18,7 +18,7 @@ defmodule Mneme.Schema.Entry do
     field(:summary, :string)
     field(:source, :string, default: "system")
     field(:source_id, :string)
-    field(:embedding, Pgvector.Ecto.Vector)
+    field(:embedding, Mneme.EmbeddingType)
     field(:embedding_model_id, :string)
     field(:metadata, :map, default: %{})
     field(:access_count, :integer, default: 0)

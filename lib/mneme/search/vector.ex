@@ -1,6 +1,11 @@
 defmodule Mneme.Search.Vector do
   @moduledoc """
-  Semantic similarity search over chunks and entries using pgvector.
+  Semantic similarity search over chunks and entries.
+
+  Supports multiple database backends via the `Mneme.DatabaseAdapter` behaviour:
+  - PostgreSQL with pgvector
+  - SQLite with sqlite-vec
+  - libSQL with native vector support
   """
 
   alias Mneme.Confidence
@@ -149,8 +154,60 @@ defmodule Mneme.Search.Vector do
   end
 
   defp do_search_chunks(embedding_str, owner_id, limit, min_score) do
+    adapter = Config.adapter()
     repo = Config.repo()
 
+    {sql, params} = chunks_query(adapter.dialect(), adapter, embedding_str, owner_id, limit, min_score)
+
+    case repo.query(sql, params) do
+      {:ok, %{rows: rows, columns: columns}} ->
+        {:ok, Enum.map(rows, fn row -> row_to_map(columns, row) end)}
+
+      {:error, reason} ->
+        Logger.error("Mneme vector search (chunks) failed: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  defp do_search_entries(embedding_str, scope_id, limit, min_score, filters) do
+    adapter = Config.adapter()
+    repo = Config.repo()
+
+    {sql, params} = entries_query(adapter.dialect(), adapter, embedding_str, scope_id, limit, min_score, filters)
+
+    case repo.query(sql, params) do
+      {:ok, %{rows: rows, columns: columns}} ->
+        results = Enum.map(rows, fn row -> row_to_map(columns, row) end)
+        results = add_context_boost(results)
+        bump_retrieval(results)
+        track_for_outcome(scope_id, results)
+        {:ok, results}
+
+      {:error, reason} ->
+        Logger.error("Mneme vector search (entries) failed: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  defp do_search_entities(embedding_str, owner_id, limit) do
+    adapter = Config.adapter()
+    repo = Config.repo()
+
+    {sql, params} = entities_query(adapter.dialect(), adapter, embedding_str, owner_id, limit)
+
+    case repo.query(sql, params) do
+      {:ok, %{rows: rows, columns: columns}} ->
+        {:ok, Enum.map(rows, fn row -> row_to_map(columns, row) end)}
+
+      {:error, reason} ->
+        Logger.error("Mneme vector search (entities) failed: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  # ── Query Builders (PostgreSQL) ─────────────────────────────────────
+
+  defp chunks_query(:postgres, _adapter, embedding_str, owner_id, limit, min_score) do
     sql = """
     SELECT
       mc.id, mc.content, mc.document_id, mc.sequence,
@@ -164,21 +221,41 @@ defmodule Mneme.Search.Vector do
     LIMIT $4
     """
 
-    case repo.query(sql, [embedding_str, uuid_to_bin(owner_id), min_score, limit]) do
-      {:ok, %{rows: rows, columns: columns}} ->
-        {:ok, Enum.map(rows, fn row -> row_to_map(columns, row) end)}
-
-      {:error, reason} ->
-        Logger.error("Mneme vector search (chunks) failed: #{inspect(reason)}")
-        {:error, reason}
-    end
+    {sql, [embedding_str, uuid_to_bin(owner_id), min_score, limit]}
   end
 
-  defp do_search_entries(embedding_str, scope_id, limit, min_score, filters) do
-    repo = Config.repo()
+  # ── Query Builders (SQLite / sqlite-vec) ────────────────────────────
 
-    # Build dynamic filter conditions
-    {filter_sql, filter_params} = build_entry_filters(filters, scope_id)
+  defp chunks_query(:sqlite, adapter, embedding_str, owner_id, limit, min_score) do
+    similarity = adapter.vector_similarity_sql("mc.embedding", "?")
+    distance = adapter.vector_distance_sql("mc.embedding", "?")
+
+    sql = """
+    SELECT
+      mc.id, mc.content, mc.document_id, mc.sequence,
+      mc.token_count, mc.metadata,
+      #{similarity} AS score
+    FROM mneme_chunks mc
+    WHERE mc.owner_id = ?
+      AND mc.embedding IS NOT NULL
+      AND #{similarity} >= ?
+    ORDER BY #{distance}
+    LIMIT ?
+    """
+
+    # Each ? in the distance/similarity expressions consumes one embedding_str param
+    {sql, [embedding_str, owner_id, embedding_str, min_score, embedding_str, limit]}
+  end
+
+  # ── Query Builders (libSQL) ─────────────────────────────────────────
+
+  defp chunks_query(:libsql, adapter, embedding_str, owner_id, limit, min_score) do
+    # libSQL uses same ? placeholder style as SQLite
+    chunks_query(:sqlite, adapter, embedding_str, owner_id, limit, min_score)
+  end
+
+  defp entries_query(:postgres, _adapter, embedding_str, scope_id, limit, min_score, filters) do
+    {filter_sql, filter_params} = build_entry_filters_pg(filters)
 
     sql = """
     SELECT
@@ -197,34 +274,87 @@ defmodule Mneme.Search.Vector do
     LIMIT $4
     """
 
-    # Adjust params: embedding_str, scope_id, min_score are positional
-    # filter_params are appended
     params = [embedding_str, uuid_to_bin(scope_id), min_score, limit | filter_params]
-
-    case repo.query(sql, params) do
-      {:ok, %{rows: rows, columns: columns}} ->
-        results = Enum.map(rows, fn row -> row_to_map(columns, row) end)
-        results = add_context_boost(results)
-        bump_retrieval(results)
-        track_for_outcome(scope_id, results)
-        {:ok, results}
-
-      {:error, reason} ->
-        Logger.error("Mneme vector search (entries) failed: #{inspect(reason)}")
-        {:error, reason}
-    end
+    {sql, params}
   end
 
-  defp build_entry_filters(filters, _scope_id) when filters == %{} or filters == nil do
+  defp entries_query(dialect, adapter, embedding_str, scope_id, limit, min_score, filters)
+       when dialect in [:sqlite, :libsql] do
+    similarity = adapter.vector_similarity_sql("me.embedding", "?")
+    distance = adapter.vector_distance_sql("me.embedding", "?")
+
+    {filter_sql, filter_params} = build_entry_filters_sqlite(filters)
+
+    sql = """
+    SELECT
+      me.id, me.content, me.summary, me.entry_type, me.source,
+      me.metadata, me.confidence, me.inserted_at,
+      me.half_life_days, me.pinned, me.emotional_valence, me.access_count,
+      me.last_accessed_at, me.context_hints,
+      #{similarity} AS score
+    FROM mneme_entries me
+    WHERE me.scope_id = ?
+      AND me.embedding IS NOT NULL
+      AND me.entry_type != 'archived'
+      AND #{similarity} >= ?
+      #{filter_sql}
+    ORDER BY #{distance}
+    LIMIT ?
+    """
+
+    # similarity (SELECT) + scope_id + similarity (WHERE) + min_score + filter_params + distance (ORDER BY) + limit
+    params = [embedding_str, scope_id, embedding_str, min_score] ++ filter_params ++ [embedding_str, limit]
+    {sql, params}
+  end
+
+  defp entities_query(:postgres, _adapter, embedding_str, owner_id, limit) do
+    sql = """
+    SELECT
+      me.id, me.name, me.entity_type, me.description,
+      me.mention_count,
+      (1 - (me.embedding <=> $1::text::vector)) AS score
+    FROM mneme_entities me
+    WHERE me.owner_id = $2
+      AND me.embedding IS NOT NULL
+    ORDER BY me.embedding <=> $1::text::vector
+    LIMIT $3
+    """
+
+    {sql, [embedding_str, uuid_to_bin(owner_id), limit]}
+  end
+
+  defp entities_query(dialect, adapter, embedding_str, owner_id, limit)
+       when dialect in [:sqlite, :libsql] do
+    similarity = adapter.vector_similarity_sql("me.embedding", "?")
+    distance = adapter.vector_distance_sql("me.embedding", "?")
+
+    sql = """
+    SELECT
+      me.id, me.name, me.entity_type, me.description,
+      me.mention_count,
+      #{similarity} AS score
+    FROM mneme_entities me
+    WHERE me.owner_id = ?
+      AND me.embedding IS NOT NULL
+    ORDER BY #{distance}
+    LIMIT ?
+    """
+
+    {sql, [embedding_str, owner_id, embedding_str, limit]}
+  end
+
+  # ── Filter Builders ─────────────────────────────────────────────────
+
+  defp build_entry_filters_pg(filters) when filters == %{} or filters == nil do
     {"", []}
   end
 
-  defp build_entry_filters(filters, _scope_id) do
+  defp build_entry_filters_pg(filters) do
     conditions_and_params =
       []
-      |> add_entry_type_filter(filters[:entry_type])
-      |> add_confidence_filter(filters[:confidence_min])
-      |> add_temporal_filter(filters[:temporal])
+      |> add_entry_type_filter_pg(filters[:entry_type])
+      |> add_confidence_filter_pg(filters[:confidence_min])
+      |> add_temporal_filter_pg(filters[:temporal])
 
     {conditions, params} = Enum.unzip(conditions_and_params)
 
@@ -238,49 +368,62 @@ defmodule Mneme.Search.Vector do
     {filter_sql, params}
   end
 
-  defp add_entry_type_filter(acc, nil), do: acc
+  defp add_entry_type_filter_pg(acc, nil), do: acc
 
-  defp add_entry_type_filter(acc, entry_type) do
+  defp add_entry_type_filter_pg(acc, entry_type) do
     acc ++ [{"me.entry_type = $#{5 + length(acc)}", to_string(entry_type)}]
   end
 
-  defp add_confidence_filter(acc, nil), do: acc
+  defp add_confidence_filter_pg(acc, nil), do: acc
 
-  defp add_confidence_filter(acc, confidence_min) do
+  defp add_confidence_filter_pg(acc, confidence_min) do
     acc ++ [{"me.confidence >= $#{5 + length(acc)}", confidence_min}]
   end
 
-  defp add_temporal_filter(acc, nil), do: acc
+  defp add_temporal_filter_pg(acc, nil), do: acc
 
-  defp add_temporal_filter(acc, :recent) do
+  defp add_temporal_filter_pg(acc, :recent) do
     thirty_days_ago = DateTime.add(DateTime.utc_now(), -30 * 24 * 3600, :second)
     acc ++ [{"me.inserted_at >= $#{5 + length(acc)}", thirty_days_ago}]
   end
 
-  defp do_search_entities(embedding_str, owner_id, limit) do
-    repo = Config.repo()
-
-    sql = """
-    SELECT
-      me.id, me.name, me.entity_type, me.description,
-      me.mention_count,
-      (1 - (me.embedding <=> $1::text::vector)) AS score
-    FROM mneme_entities me
-    WHERE me.owner_id = $2
-      AND me.embedding IS NOT NULL
-    ORDER BY me.embedding <=> $1::text::vector
-    LIMIT $3
-    """
-
-    case repo.query(sql, [embedding_str, uuid_to_bin(owner_id), limit]) do
-      {:ok, %{rows: rows, columns: columns}} ->
-        {:ok, Enum.map(rows, fn row -> row_to_map(columns, row) end)}
-
-      {:error, reason} ->
-        Logger.error("Mneme vector search (entities) failed: #{inspect(reason)}")
-        {:error, reason}
-    end
+  defp build_entry_filters_sqlite(filters) when filters == %{} or filters == nil do
+    {"", []}
   end
+
+  defp build_entry_filters_sqlite(filters) do
+    conditions_and_params =
+      []
+      |> add_filter_sqlite(filters[:entry_type], "me.entry_type = ?", &to_string/1)
+      |> add_filter_sqlite(filters[:confidence_min], "me.confidence >= ?", & &1)
+      |> add_temporal_filter_sqlite(filters[:temporal])
+
+    {conditions, params} = Enum.unzip(conditions_and_params)
+
+    filter_sql =
+      if conditions == [] do
+        ""
+      else
+        "AND " <> Enum.join(conditions, " AND ")
+      end
+
+    {filter_sql, params}
+  end
+
+  defp add_filter_sqlite(acc, nil, _sql, _transform), do: acc
+
+  defp add_filter_sqlite(acc, value, sql, transform) do
+    acc ++ [{sql, transform.(value)}]
+  end
+
+  defp add_temporal_filter_sqlite(acc, nil), do: acc
+
+  defp add_temporal_filter_sqlite(acc, :recent) do
+    thirty_days_ago = DateTime.add(DateTime.utc_now(), -30 * 24 * 3600, :second)
+    acc ++ [{"me.inserted_at >= ?", DateTime.to_iso8601(thirty_days_ago)}]
+  end
+
+  # ── Helpers ─────────────────────────────────────────────────────────
 
   defp bump_retrieval(results) do
     ids = results |> Enum.map(& &1["id"]) |> Enum.reject(&is_nil/1)
@@ -299,7 +442,6 @@ defmodule Mneme.Search.Vector do
     if map_size(current) == 0 do
       results
     else
-      # Parse context_hints and apply boost
       Enum.map(results, fn entry ->
         [entry] |> ContextBooster.apply_boost(current) |> hd()
       end)

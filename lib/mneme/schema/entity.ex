@@ -20,7 +20,7 @@ defmodule Mneme.Schema.Entity do
     field(:mention_count, :integer, default: 1)
     field(:first_seen_at, :utc_datetime_usec)
     field(:last_seen_at, :utc_datetime_usec)
-    field(:embedding, Pgvector.Ecto.Vector)
+    field(:embedding, Mneme.EmbeddingType)
     field(:embedding_model_id, :string)
     field(:owner_id, :binary_id)
     field(:scope_id, :binary_id)

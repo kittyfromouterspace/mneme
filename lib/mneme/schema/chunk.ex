@@ -13,7 +13,7 @@ defmodule Mneme.Schema.Chunk do
   schema "mneme_chunks" do
     field(:sequence, :integer)
     field(:content, :string)
-    field(:embedding, Pgvector.Ecto.Vector)
+    field(:embedding, Mneme.EmbeddingType)
     field(:embedding_model_id, :string)
     field(:token_count, :integer, default: 0)
     field(:start_offset, :integer, default: 0)

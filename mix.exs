@@ -1,7 +1,7 @@
 defmodule Mneme.MixProject do
   use Mix.Project
 
-  @version "0.2.1"
+  @version "0.3.0"
 
   def project do
     [
@@ -13,7 +13,7 @@ defmodule Mneme.MixProject do
       aliases: aliases(),
       elixirc_paths: elixirc_paths(Mix.env()),
       description:
-        "Pluggable memory engine with vector search, knowledge graphs, and LLM extraction. Now supports PostgreSQL and libSQL/SQLite.",
+        "Pluggable memory engine with vector search, knowledge graphs, and LLM extraction. Supports PostgreSQL (pgvector), SQLite (sqlite-vec), and libSQL.",
       package: package(),
       dialyzer: [ignore_warnings: ".dialyzer_ignore.exs"]
     ]
@@ -42,8 +42,11 @@ defmodule Mneme.MixProject do
       {:postgrex, "~> 0.19", optional: true},
       # pgvector for PostgreSQL vector support
       {:pgvector, "~> 0.3", optional: true},
-      # libSQL support (recommended for new installations)
+      # libSQL support (legacy)
       {:ecto_libsql, "~> 0.9", optional: true},
+      # SQLite3 + sqlite-vec support (recommended for new installations)
+      {:ecto_sqlite3, "~> 0.18", optional: true},
+      {:sqlite_vec, "~> 0.1", optional: true},
 
       # Local embedding support (optional - enables Mneme.Embedding.Local)
       {:bumblebee, "~> 0.6.0", optional: true},

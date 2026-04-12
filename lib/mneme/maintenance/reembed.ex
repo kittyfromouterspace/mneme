@@ -108,13 +108,25 @@ defmodule Mneme.Maintenance.Reembed do
   end
 
   defp write_row(repo, table, id, embedding, model_id) do
-    pgvec = Pgvector.new(embedding)
-    id_bin = uuid_to_binary(id)
+    adapter = Mneme.Config.adapter()
+    formatted = adapter.format_embedding(embedding)
 
-    repo.query(
-      "UPDATE #{table} SET embedding = $1, embedding_model_id = $2 WHERE id = $3",
-      [pgvec, model_id, id_bin]
-    )
+    case adapter.dialect() do
+      :postgres ->
+        pgvec = if Code.ensure_loaded?(Pgvector), do: apply(Pgvector, :new, [embedding]), else: formatted
+        id_bin = uuid_to_binary(id)
+
+        repo.query(
+          "UPDATE #{table} SET embedding = $1, embedding_model_id = $2 WHERE id = $3",
+          [pgvec, model_id, id_bin]
+        )
+
+      _ ->
+        repo.query(
+          "UPDATE #{table} SET embedding = ?, embedding_model_id = ? WHERE id = ?",
+          [formatted, model_id, id]
+        )
+    end
   end
 
   defp uuid_to_binary(id) when is_binary(id) and byte_size(id) == 16, do: id

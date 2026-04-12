@@ -136,11 +136,21 @@ defmodule Mneme.Pipeline.Embedder do
   end
 
   defp store_embedding(repo, table, id, embedding, model_id) do
-    pgvec = Pgvector.new(embedding)
-    id_bin = uuid_to_binary(id)
-    query = "UPDATE #{table} SET embedding = $1, embedding_model_id = $2 WHERE id = $3"
+    adapter = Config.adapter()
+    formatted = adapter.format_embedding(embedding)
 
-    case repo.query(query, [pgvec, model_id, id_bin]) do
+    {query, params} =
+      case adapter.dialect() do
+        :postgres ->
+          pgvec = if Code.ensure_loaded?(Pgvector), do: apply(Pgvector, :new, [embedding]), else: formatted
+          id_bin = uuid_to_binary(id)
+          {"UPDATE #{table} SET embedding = $1, embedding_model_id = $2 WHERE id = $3", [pgvec, model_id, id_bin]}
+
+        _ ->
+          {"UPDATE #{table} SET embedding = ?, embedding_model_id = ? WHERE id = ?", [formatted, model_id, id]}
+      end
+
+    case repo.query(query, params) do
       {:ok, _} ->
         :ok
 
