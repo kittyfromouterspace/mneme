@@ -29,6 +29,11 @@ defmodule Mneme.Maintenance.Reembed do
 
   @default_tables ["mneme_chunks", "mneme_entries", "mneme_entities"]
 
+  @doc """
+  Re-embeds rows in the specified tables according to the given scope.
+
+  See module documentation for available options.
+  """
   def run(opts \\ []) do
     embedding_fn = Keyword.get(opts, :embedding_fn, &default_embedding_fn/1)
     progress_callback = Keyword.get(opts, :progress_callback, fn _ -> :ok end)
@@ -40,10 +45,8 @@ defmodule Mneme.Maintenance.Reembed do
 
     total =
       Enum.reduce(tables, 0, fn table, acc ->
-        case reembed_table(table, repo, batch_size, concurrency, scope, embedding_fn, progress_callback) do
-          {:ok, count} -> acc + count
-          _ -> acc
-        end
+        {:ok, count} = reembed_table(table, repo, batch_size, concurrency, scope, embedding_fn, progress_callback)
+        acc + count
       end)
 
     Logger.info("Mneme.Reembed: re-embedded #{total} records")

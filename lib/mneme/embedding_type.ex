@@ -12,20 +12,12 @@ defmodule Mneme.EmbeddingType do
   use Ecto.Type
 
   alias Mneme.Config
-  alias Pgvector.Ecto.Vector
+
+  @pgvector_available match?({:module, _}, Code.ensure_compiled(Pgvector))
 
   @impl true
   def type do
-    # Return the underlying database type
-    adapter = Config.adapter()
-
-    if adapter.dialect() == :postgres do
-      # PostgreSQL uses pgvector's custom type
-      :string
-    else
-      # libSQL stores as text (JSON array)
-      :string
-    end
+    :string
   end
 
   @impl true
@@ -50,34 +42,63 @@ defmodule Mneme.EmbeddingType do
 
   def cast(_), do: :error
 
-  @impl true
-  def dump(data) when is_list(data) do
-    adapter = Config.adapter()
+  if @pgvector_available do
+    @impl true
+    def dump(data) when is_list(data) do
+      adapter = Config.adapter()
 
-    if adapter.dialect() == :postgres and Code.ensure_loaded?(Vector) do
-      {:ok, struct(Vector, %{embedding: data})}
-    else
-      {:ok, adapter.format_embedding(data)}
+      if adapter.dialect() == :postgres do
+        {:ok, Pgvector.new(data)}
+      else
+        {:ok, adapter.format_embedding(data)}
+      end
     end
-  end
 
-  def dump(nil), do: {:ok, nil}
-  def dump(_), do: :error
+    def dump(nil), do: {:ok, nil}
+    def dump(_), do: :error
 
-  @impl true
-  def load(data) when is_list(data) do
-    {:ok, data}
-  end
-
-  def load(value) when is_binary(value) do
-    case Jason.decode(value) do
-      {:ok, list} when is_list(list) -> {:ok, list}
-      _ -> {:ok, nil}
+    @impl true
+    def load(%{__struct__: Pgvector} = vec) do
+      {:ok, Pgvector.to_list(vec)}
     end
-  end
 
-  def load(nil), do: {:ok, nil}
-  def load(_), do: :error
+    def load(data) when is_list(data) do
+      {:ok, data}
+    end
+
+    def load(value) when is_binary(value) do
+      case Jason.decode(value) do
+        {:ok, list} when is_list(list) -> {:ok, list}
+        _ -> {:ok, nil}
+      end
+    end
+
+    def load(nil), do: {:ok, nil}
+    def load(_), do: :error
+  else
+    @impl true
+    def dump(data) when is_list(data) do
+      {:ok, Config.adapter().format_embedding(data)}
+    end
+
+    def dump(nil), do: {:ok, nil}
+    def dump(_), do: :error
+
+    @impl true
+    def load(data) when is_list(data) do
+      {:ok, data}
+    end
+
+    def load(value) when is_binary(value) do
+      case Jason.decode(value) do
+        {:ok, list} when is_list(list) -> {:ok, list}
+        _ -> {:ok, nil}
+      end
+    end
+
+    def load(nil), do: {:ok, nil}
+    def load(_), do: :error
+  end
 
   @doc """
   Format an embedding for SQL insertion.

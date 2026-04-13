@@ -6,6 +6,9 @@ defmodule Mneme.Application do
 
   require Logger
 
+  @deps_available match?({:module, _}, Code.ensure_compiled(Bumblebee)) and
+                    match?({:module, _}, Code.ensure_compiled(Nx))
+
   @impl true
   def start(_type, _args) do
     init_persistent_term()
@@ -24,21 +27,38 @@ defmodule Mneme.Application do
     Supervisor.start_link(children, opts)
   end
 
-  defp maybe_add_local_embedding_serving(children) do
-    if Mneme.Config.embedding_provider() == Local do
-      case Local.build_serving() do
-        {:ok, serving} ->
-          child =
-            {Nx.Serving, serving: serving, name: Local.serving_name(), batch_timeout: 100}
+  if @deps_available do
+    defp maybe_add_local_embedding_serving(children) do
+      if Mneme.Config.embedding_provider() == Local do
+        case Local.build_serving() do
+          {:ok, serving} ->
+            child =
+              {Nx.Serving, serving: serving, name: Local.serving_name(), batch_timeout: 100}
 
-          [child | children]
+            [child | children]
 
-        {:error, reason} ->
-          Logger.warning("Mneme: local embedding serving could not initialize: #{inspect(reason)}")
-          children
+          {:error, reason} ->
+            Logger.warning(
+              "Mneme: local embedding serving could not initialize: #{inspect(reason)}"
+            )
+
+            children
+        end
+      else
+        children
       end
-    else
-      children
+    end
+  else
+    defp maybe_add_local_embedding_serving(children) do
+      if Mneme.Config.embedding_provider() == Local do
+        {:error, reason} = Local.build_serving()
+
+        Logger.warning("Mneme: local embedding serving could not initialize: #{inspect(reason)}")
+
+        children
+      else
+        children
+      end
     end
   end
 

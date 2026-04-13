@@ -1,6 +1,7 @@
 defmodule Mneme.Learner.CodingAgent.Util do
   @moduledoc false
 
+  @doc false
   def parse_frontmatter(content) do
     case String.split(content, "---", parts: 3) do
       ["", yaml_str, body] ->
@@ -44,10 +45,13 @@ defmodule Mneme.Learner.CodingAgent.Util do
     end
   end
 
+  @doc false
   def expand(path), do: Path.expand(path)
 
+  @doc false
   def dir_exists?(path), do: File.dir?(expand(path))
 
+  @doc false
   def read_file(path, max_bytes \\ 8000) do
     case File.read(path) do
       {:ok, content} -> {:ok, String.slice(content, 0, max_bytes)}
@@ -55,9 +59,11 @@ defmodule Mneme.Learner.CodingAgent.Util do
     end
   end
 
+  @doc false
   def short_id(id) when is_binary(id) and byte_size(id) > 8, do: String.slice(id, 0, 8)
   def short_id(id), do: id
 
+  @doc false
   def project_tag(project) when is_binary(project) do
     display =
       project
@@ -68,8 +74,10 @@ defmodule Mneme.Learner.CodingAgent.Util do
     "project:#{display}"
   end
 
+  @doc false
   def project_tag(_), do: "project:unknown"
 
+  @doc false
   def extract_jsonl_lines(content) do
     content
     |> String.split("\n", trim: true)
@@ -80,6 +88,7 @@ defmodule Mneme.Learner.CodingAgent.Util do
     end)
   end
 
+  @doc false
   def extract_user_text_from_json(obj) do
     type = Map.get(obj, "type")
 
