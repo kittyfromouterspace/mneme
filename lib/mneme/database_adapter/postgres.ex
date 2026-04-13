@@ -17,6 +17,8 @@ defmodule Mneme.DatabaseAdapter.Postgres do
 
   @behaviour Mneme.DatabaseAdapter
 
+  alias Pgvector.Ecto.Vector
+
   @impl true
   def vector_type(dimensions) do
     "vector(#{dimensions})"
@@ -24,7 +26,7 @@ defmodule Mneme.DatabaseAdapter.Postgres do
 
   @impl true
   def vector_ecto_type do
-    if Code.ensure_loaded?(Pgvector.Ecto.Vector), do: Pgvector.Ecto.Vector, else: :string
+    if Code.ensure_loaded?(Vector), do: Vector, else: :string
   end
 
   @impl true

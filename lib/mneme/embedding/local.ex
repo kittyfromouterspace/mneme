@@ -112,29 +112,29 @@ defmodule Mneme.Embedding.Local do
         )
 
       serving =
-        Nx.Serving.new(
-          fn _batch_key, defn_options ->
-            embedding_fun =
-              Nx.Defn.compile(
-                embedding_fun,
-                [
-                  model_info.params,
-                  %{
-                    "input_ids" => Nx.template({batch_size, sequence_length}, :u32),
-                    "attention_mask" => Nx.template({batch_size, sequence_length}, :u32)
-                  }
-                ],
-                defn_options
-              )
+        fn _batch_key, defn_options ->
+          embedding_fun =
+            Nx.Defn.compile(
+              embedding_fun,
+              [
+                model_info.params,
+                %{
+                  "input_ids" => Nx.template({batch_size, sequence_length}, :u32),
+                  "attention_mask" => Nx.template({batch_size, sequence_length}, :u32)
+                }
+              ],
+              defn_options
+            )
 
-            fn inputs ->
-              inputs = Bumblebee.Shared.maybe_pad(inputs, batch_size)
-              embedding_fun.(model_info.params, inputs)
-              |> Bumblebee.Shared.serving_post_computation()
-            end
-          end,
-          defn_options
-        )
+          fn inputs ->
+            inputs = Bumblebee.Shared.maybe_pad(inputs, batch_size)
+
+            model_info.params
+            |> embedding_fun.(inputs)
+            |> Bumblebee.Shared.serving_post_computation()
+          end
+        end
+        |> Nx.Serving.new(defn_options)
         |> Nx.Serving.batch_size(batch_size)
         |> Nx.Serving.client_preprocessing(fn input ->
           {texts, multi?} =
@@ -145,14 +145,16 @@ defmodule Mneme.Embedding.Local do
               Bumblebee.apply_tokenizer(tokenizer, texts)
             end)
 
-          batch = [inputs] |> Nx.Batch.concatenate()
+          batch = Nx.Batch.concatenate([inputs])
           {batch, multi?}
         end)
         |> Nx.Serving.client_postprocessing(fn {embeddings, _metadata}, multi? ->
-          for embedding <- Bumblebee.Utils.Nx.batch_to_list(embeddings) do
-            %{embedding: embedding}
-          end
-          |> Bumblebee.Shared.normalize_output(multi?)
+          for_result =
+            for embedding <- Bumblebee.Utils.Nx.batch_to_list(embeddings) do
+              %{embedding: embedding}
+            end
+
+          Bumblebee.Shared.normalize_output(for_result, multi?)
         end)
 
       {:ok, serving}

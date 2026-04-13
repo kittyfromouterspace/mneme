@@ -323,8 +323,7 @@ defmodule Mneme.Search.Vector do
     {sql, [embedding_str, uuid_to_bin(owner_id), limit]}
   end
 
-  defp entities_query(dialect, adapter, embedding_str, owner_id, limit)
-       when dialect in [:sqlite, :libsql] do
+  defp entities_query(dialect, adapter, embedding_str, owner_id, limit) when dialect in [:sqlite, :libsql] do
     similarity = adapter.vector_similarity_sql("me.embedding", "?")
     distance = adapter.vector_distance_sql("me.embedding", "?")
 

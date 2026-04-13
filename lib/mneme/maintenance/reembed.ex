@@ -108,7 +108,7 @@ defmodule Mneme.Maintenance.Reembed do
   end
 
   defp write_row(repo, table, id, embedding, model_id) do
-    adapter = Mneme.Config.adapter()
+    adapter = Config.adapter()
     formatted = adapter.format_embedding(embedding)
 
     case adapter.dialect() do
