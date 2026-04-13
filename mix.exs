@@ -50,7 +50,7 @@ defmodule Mneme.MixProject do
 
       # Local embedding support (optional - enables Mneme.Embedding.Local)
       {:bumblebee, "~> 0.6.0", optional: true},
-      {:exla, ">= 0.0.0", optional: true},
+      {:torchx, ">= 0.0.0", optional: true},
 
       # Dev/Test tooling
       {:ex_check, "~> 0.16", only: [:dev], runtime: false},

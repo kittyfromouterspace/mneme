@@ -11,12 +11,12 @@ defmodule Mneme.Embedding.Local do
   Add to your `mix.exs` dependencies:
 
       {:bumblebee, "~> 0.6.0"},
-      {:exla, ">= 0.0.0"}
+      {:torchx, ">= 0.0.0"}
 
-  And configure Nx to use EXLA as the default backend in your
+  And configure Nx to use Torchx as the default backend in your
   `config/config.exs`:
 
-      config :nx, default_backend: EXLA.Backend
+      config :nx, default_backend: Torchx.Backend
 
   ## Configuration
 
@@ -73,7 +73,7 @@ defmodule Mneme.Embedding.Local do
       do_build_serving()
     else
       {:error,
-       ":bumblebee and :exla are not installed. Add them to your mix.exs dependencies to use Mneme.Embedding.Local."}
+       ":bumblebee and :torchx are not installed. Add them to your mix.exs dependencies to use Mneme.Embedding.Local."}
     end
   end
 
@@ -160,8 +160,8 @@ defmodule Mneme.Embedding.Local do
   end
 
   defp default_defn_options do
-    if Code.ensure_loaded?(EXLA) do
-      [compiler: EXLA]
+    if Code.ensure_loaded?(Torchx) do
+      [compiler: Torchx]
     else
       []
     end
@@ -178,7 +178,7 @@ defmodule Mneme.Embedding.Local do
       embeddings = for i <- 0..(n - 1), do: Nx.to_flat_list(tensor[i])
       {:ok, embeddings}
     else
-      {:error, "Local embedding serving is not running. Ensure :bumblebee and :exla are in your dependencies."}
+      {:error, "Local embedding serving is not running. Ensure :bumblebee and :torchx are in your dependencies."}
     end
   rescue
     e -> {:error, Exception.message(e)}
