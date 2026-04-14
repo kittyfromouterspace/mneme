@@ -25,6 +25,8 @@ defmodule Mneme.Learner.CodingAgent.OpenCode do
   @impl true
   def default_data_paths, do: ["~/.local/share/opencode"]
 
+  def data_paths, do: default_data_paths()
+
   @impl true
   def available?(config \\ %{}) do
     path = Path.join(Util.expand(hd(resolve_paths(config))), "opencode.db")

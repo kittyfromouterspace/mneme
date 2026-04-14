@@ -26,6 +26,8 @@ defmodule Mneme.Learner.CodingAgent.Codex do
   @impl true
   def default_data_paths, do: ["~/.codex"]
 
+  def data_paths, do: default_data_paths()
+
   @impl true
   def available?(config \\ %{}), do: Util.dir_exists?(hd(resolve_paths(config)))
 

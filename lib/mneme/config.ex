@@ -41,8 +41,6 @@ defmodule Mneme.Config do
         ]
   """
 
-  alias Mneme.Embedding.Local
-
   @doc "The Ecto Repo module provided by the host app."
   def repo do
     Application.fetch_env!(:mneme, :repo)
@@ -56,12 +54,11 @@ defmodule Mneme.Config do
   @doc """
   Embedding provider module (implements Mneme.EmbeddingProvider).
 
-  Defaults to `Mneme.Embedding.Local` (runs locally via Bumblebee)
-  when no provider is explicitly configured.
+  The host application must configure a provider via `config :mneme`.
   """
   def embedding_provider do
     config = Application.get_env(:mneme, :embedding, [])
-    Keyword.get(config, :provider, Local)
+    Keyword.get(config, :provider)
   end
 
   @doc """
@@ -83,9 +80,6 @@ defmodule Mneme.Config do
         static_opts = Keyword.drop(config, [:provider, :credentials_fn])
 
         cond do
-          embedding_provider() == Local ->
-            Map.new(static_opts)
-
           Keyword.get(static_opts, :api_key) ->
             static_opts |> Map.new() |> Map.put(:api_key, Keyword.get(static_opts, :api_key))
 

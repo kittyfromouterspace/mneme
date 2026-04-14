@@ -2,13 +2,6 @@ defmodule Mneme.Application do
   @moduledoc false
   use Application
 
-  alias Mneme.Embedding.Local
-
-  require Logger
-
-  @deps_available match?({:module, _}, Code.ensure_compiled(Bumblebee)) and
-                    match?({:module, _}, Code.ensure_compiled(Nx))
-
   @impl true
   def start(_type, _args) do
     init_persistent_term()
@@ -21,45 +14,8 @@ defmodule Mneme.Application do
       Mneme.RetrievalCounter
     ]
 
-    children = maybe_add_local_embedding_serving(children)
-
     opts = [strategy: :one_for_one, name: Mneme.Supervisor]
     Supervisor.start_link(children, opts)
-  end
-
-  if @deps_available do
-    defp maybe_add_local_embedding_serving(children) do
-      if Mneme.Config.embedding_provider() == Local do
-        case Local.build_serving() do
-          {:ok, serving} ->
-            child =
-              {Nx.Serving, serving: serving, name: Local.serving_name(), batch_timeout: 100}
-
-            [child | children]
-
-          {:error, reason} ->
-            Logger.warning(
-              "Mneme: local embedding serving could not initialize: #{inspect(reason)}"
-            )
-
-            children
-        end
-      else
-        children
-      end
-    end
-  else
-    defp maybe_add_local_embedding_serving(children) do
-      if Mneme.Config.embedding_provider() == Local do
-        {:error, reason} = Local.build_serving()
-
-        Logger.warning("Mneme: local embedding serving could not initialize: #{inspect(reason)}")
-
-        children
-      else
-        children
-      end
-    end
   end
 
   defp init_persistent_term do

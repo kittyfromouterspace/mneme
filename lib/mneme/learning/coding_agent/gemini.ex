@@ -24,6 +24,8 @@ defmodule Mneme.Learner.CodingAgent.Gemini do
   @impl true
   def default_data_paths, do: ["~/.gemini"]
 
+  def data_paths, do: default_data_paths()
+
   @impl true
   def available?(config \\ %{}), do: Util.dir_exists?(hd(resolve_paths(config)))
 
