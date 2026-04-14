@@ -24,17 +24,17 @@ defmodule Mneme.Learner.CodingAgent.Codex do
   def agent_name, do: :codex
 
   @impl true
-  def data_paths, do: ["~/.codex"]
+  def default_data_paths, do: ["~/.codex"]
 
   @impl true
-  def available?, do: Util.dir_exists?(hd(data_paths()))
+  def available?(config \\ %{}), do: Util.dir_exists?(hd(resolve_paths(config)))
 
   @impl true
-  def fetch_events, do: fetch_events([])
+  def fetch_events(config \\ %{}), do: fetch_events(config, [])
 
   @impl true
-  def fetch_events(opts) do
-    base = Util.expand(hd(data_paths()))
+  def fetch_events(config, opts) do
+    base = Util.expand(hd(resolve_paths(config)))
 
     instruction_events = fetch_instructions(base)
     session_events = fetch_sessions(base, opts)
@@ -244,6 +244,9 @@ defmodule Mneme.Learner.CodingAgent.Codex do
         []
     end
   end
+
+  defp resolve_paths(%{data_paths: [_ | _] = paths}), do: paths
+  defp resolve_paths(_), do: default_data_paths()
 
   defp mtime_to_datetime({{y, m, d}, {h, min, s}}) do
     {:ok, ndt} = NaiveDateTime.new(y, m, d, h, min, s)

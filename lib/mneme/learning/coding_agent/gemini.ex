@@ -22,17 +22,17 @@ defmodule Mneme.Learner.CodingAgent.Gemini do
   def agent_name, do: :gemini
 
   @impl true
-  def data_paths, do: ["~/.gemini"]
+  def default_data_paths, do: ["~/.gemini"]
 
   @impl true
-  def available?, do: Util.dir_exists?(hd(data_paths()))
+  def available?(config \\ %{}), do: Util.dir_exists?(hd(resolve_paths(config)))
 
   @impl true
-  def fetch_events, do: fetch_events([])
+  def fetch_events(config \\ %{}), do: fetch_events(config, [])
 
   @impl true
-  def fetch_events(opts) do
-    base = Util.expand(hd(data_paths()))
+  def fetch_events(config, opts) do
+    base = Util.expand(hd(resolve_paths(config)))
     fetch_sessions(base, opts)
   end
 
@@ -134,6 +134,9 @@ defmodule Mneme.Learner.CodingAgent.Gemini do
         true
     end
   end
+
+  defp resolve_paths(%{data_paths: [_ | _] = paths}), do: paths
+  defp resolve_paths(_), do: default_data_paths()
 
   defp parse_gemini_session(path) do
     with {:ok, content} <- File.read(path),

@@ -23,20 +23,20 @@ defmodule Mneme.Learner.CodingAgent.OpenCode do
   def agent_name, do: :opencode
 
   @impl true
-  def data_paths, do: ["~/.local/share/opencode"]
+  def default_data_paths, do: ["~/.local/share/opencode"]
 
   @impl true
-  def available? do
-    path = Path.join(Util.expand(hd(data_paths())), "opencode.db")
+  def available?(config \\ %{}) do
+    path = Path.join(Util.expand(hd(resolve_paths(config))), "opencode.db")
     File.exists?(path)
   end
 
   @impl true
-  def fetch_events, do: fetch_events([])
+  def fetch_events(config \\ %{}), do: fetch_events(config, [])
 
   @impl true
-  def fetch_events(opts) do
-    base = Util.expand(hd(data_paths()))
+  def fetch_events(config, opts) do
+    base = Util.expand(hd(resolve_paths(config)))
     db_path = Path.join(base, "opencode.db")
 
     if File.exists?(db_path) do
@@ -133,6 +133,9 @@ defmodule Mneme.Learner.CodingAgent.OpenCode do
         []
     end
   end
+
+  defp resolve_paths(%{data_paths: [_ | _] = paths}), do: paths
+  defp resolve_paths(_), do: default_data_paths()
 
   defp parse_session_row(%{"id" => id, "title" => title, "directory" => directory, "path" => project_path}) do
     project =

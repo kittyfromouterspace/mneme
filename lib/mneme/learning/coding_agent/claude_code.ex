@@ -46,17 +46,17 @@ defmodule Mneme.Learner.CodingAgent.ClaudeCode do
   def agent_name, do: :claude_code
 
   @impl true
-  def data_paths, do: ["~/.claude/projects"]
+  def default_data_paths, do: ["~/.claude/projects"]
 
   @impl true
-  def available?, do: Util.dir_exists?(hd(data_paths()))
+  def available?(config \\ %{}), do: Util.dir_exists?(hd(resolve_paths(config)))
 
   @impl true
-  def fetch_events, do: fetch_events([])
+  def fetch_events(config \\ %{}), do: fetch_events(config, [])
 
   @impl true
-  def fetch_events(opts) do
-    dir = Util.expand(hd(data_paths()))
+  def fetch_events(config, opts) do
+    dir = Util.expand(hd(resolve_paths(config)))
     projects = Keyword.get(opts, :projects)
     since = Keyword.get(opts, :since, %{})
 
@@ -310,6 +310,9 @@ defmodule Mneme.Learner.CodingAgent.ClaudeCode do
   end
 
   defp mtime_to_datetime(_), do: DateTime.utc_now()
+
+  defp resolve_paths(%{data_paths: [_ | _] = paths}), do: paths
+  defp resolve_paths(_), do: default_data_paths()
 
   defp detect_memory_type(filename) do
     name = String.downcase(filename)

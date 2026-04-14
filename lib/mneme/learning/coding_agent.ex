@@ -15,7 +15,7 @@ defmodule Mneme.Learner.CodingAgent do
 
   ## Provider registry
 
-  | Agent       | Module                          | Data dir(s)                           |
+  | Agent       | Module                          | Default data dir(s)                   |
   |-------------|---------------------------------|---------------------------------------|
   | Claude Code | `CodingAgent.ClaudeCode`        | `~/.claude/projects/`                 |
   | Codex       | `CodingAgent.Codex`             | `~/.codex/`                           |
@@ -23,8 +23,10 @@ defmodule Mneme.Learner.CodingAgent do
   | OpenCode    | `CodingAgent.OpenCode`          | `~/.local/share/opencode/`            |
   | Goose       | `CodingAgent.Goose`             | `~/.config/goose/`                    |
 
-  Each provider is auto-detected — if its data directory doesn't exist,
-  it's silently skipped.
+  Data paths can be overridden by passing an `:agent_configs` map
+  (keyed by agent name) through the opts. This allows the caller
+  (e.g. Worth) to inject paths from a central registry (e.g. AgentEx)
+  without creating a circular dependency.
   """
 
   @behaviour Mneme.Learner
@@ -46,10 +48,9 @@ defmodule Mneme.Learner.CodingAgent do
     start_time = System.monotonic_time()
 
     events =
-      @providers
-      |> Enum.filter(& &1.available?())
-      |> Enum.flat_map(& &1.fetch_events())
-      |> Enum.map(fn event -> Map.put(event, :agent, event.agent) end)
+      provider_configs()
+      |> Enum.filter(fn {mod, config} -> mod.available?(config) end)
+      |> Enum.flat_map(fn {mod, config} -> mod.fetch_events(config) end)
 
     duration =
       System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
@@ -111,14 +112,29 @@ defmodule Mneme.Learner.CodingAgent do
   end
 
   @doc "List available providers and their status."
-  def status do
-    Enum.map(@providers, fn mod ->
-      {mod.agent_name(), mod.available?(), mod.data_paths()}
+  def status(overrides \\ %{}) do
+    Enum.map(provider_configs(overrides), fn {mod, config} ->
+      {mod.agent_name(), mod.available?(config), config.data_paths}
     end)
   end
 
   @doc "Get the list of provider modules."
   def providers, do: @providers
+
+  @doc """
+  Build `[{module, config}]` tuples for all providers.
+
+  `overrides` is a map of `%{agent_name => %{data_paths: [...]}}`.
+  Providers not in the overrides map use their `default_data_paths/0`.
+  """
+  def provider_configs(overrides \\ %{}) do
+    Enum.map(@providers, fn mod ->
+      name = mod.agent_name()
+      override = Map.get(overrides, name, %{})
+      paths = Map.get(override, :data_paths, mod.default_data_paths())
+      {mod, %{data_paths: paths}}
+    end)
+  end
 
   @doc """
   Fetch events only from providers that pass the given filter.
@@ -139,18 +155,21 @@ defmodule Mneme.Learner.CodingAgent do
     If a provider has no entry, all its projects are included.
   - `:since` — map of `%{agent_name => %{project_slug => timestamp_string, ...}}`
     to only fetch events newer than the given timestamps.
+  - `:agent_configs` — map of `%{agent_name => %{data_paths: [...]}}` to override
+    default data paths. Injected by Worth from agent_ex's central registry.
   """
   def fetch_authorized_events(filter_fn, opts) when is_function(filter_fn, 1) and is_list(opts) do
     start_time = System.monotonic_time()
     projects = Keyword.get(opts, :projects)
     since = Keyword.get(opts, :since)
+    agent_configs = Keyword.get(opts, :agent_configs, %{})
 
     events =
-      @providers
-      |> Enum.filter(fn provider ->
-        provider.available?() and filter_fn.(provider)
+      provider_configs(agent_configs)
+      |> Enum.filter(fn {provider, config} ->
+        provider.available?(config) and filter_fn.(provider)
       end)
-      |> Enum.flat_map(fn provider ->
+      |> Enum.flat_map(fn {provider, config} ->
         agent = provider.agent_name()
         provider_projects = if projects, do: Map.get(projects, agent)
         provider_since = if since, do: Map.get(since, to_string(agent), %{})
@@ -165,7 +184,7 @@ defmodule Mneme.Learner.CodingAgent do
             do: Keyword.put(provider_opts, :since, provider_since),
             else: provider_opts
 
-        fetch_provider_events(provider, provider_opts)
+        provider.fetch_events(config, provider_opts)
       end)
 
     duration =
@@ -182,14 +201,6 @@ defmodule Mneme.Learner.CodingAgent do
 
   defp provider_for(agent) when is_atom(agent) do
     Enum.find(@providers, &(&1.agent_name() == agent))
-  end
-
-  defp fetch_provider_events(provider, opts) do
-    if function_exported?(provider, :fetch_events, 1) do
-      provider.fetch_events(opts)
-    else
-      provider.fetch_events()
-    end
   end
 
   defp default_summarize(agent, events) do

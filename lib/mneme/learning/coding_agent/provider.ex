@@ -6,6 +6,10 @@ defmodule Mneme.Learner.CodingAgent.Provider do
   coding agent (Claude Code, Codex, Gemini CLI, etc.) and extract
   learnable events from it.
 
+  Providers receive a `config` map containing at minimum
+  `%{data_paths: [String.t()]}`. When no config is supplied,
+  providers fall back to their `default_data_paths/0`.
+
   ## Implementing a new provider
 
       defmodule Mneme.Learner.CodingAgent.MyAgent do
@@ -15,16 +19,20 @@ defmodule Mneme.Learner.CodingAgent.Provider do
         def agent_name, do: :my_agent
 
         @impl true
-        def data_paths, do: ["~/.my_agent"]
+        def default_data_paths, do: ["~/.my_agent"]
 
         @impl true
-        def available? do
-          data_paths()
+        def available?(config) do
+          resolve_paths(config)
           |> Enum.any?(fn p -> File.dir?(Path.expand(p)) end)
         end
 
         @impl true
-        def fetch_events do
+        def fetch_events(config), do: fetch_events(config, [])
+
+        @impl true
+        def fetch_events(config, _opts) do
+          base = hd(resolve_paths(config)) |> Path.expand()
           # Read data dirs, return list of event maps
         end
 
@@ -32,25 +40,29 @@ defmodule Mneme.Learner.CodingAgent.Provider do
         def extract(event) do
           # Convert event into an extract map
         end
+
+        defp resolve_paths(%{data_paths: [_ | _] = paths}), do: paths
+        defp resolve_paths(_), do: default_data_paths()
       end
   """
+
+  @type config :: %{data_paths: [String.t()]}
 
   @doc "Unique atom name for this agent (e.g. :claude_code, :codex)."
   @callback agent_name() :: atom()
 
-  @doc "List of data directory paths to probe (tilde-expanded)."
-  @callback data_paths() :: [String.t()]
+  @doc "Default data directory paths (tilde-expanded). Used when no config is injected."
+  @callback default_data_paths() :: [String.t()]
 
   @doc "Returns true if this agent's data directory exists on disk."
-  @callback available?() :: boolean()
+  @callback available?(config()) :: boolean()
 
   @doc """
   Fetch all learnable events from this agent's data directories.
 
   Each event must include an `:agent` key set to `agent_name()`.
-  Other keys are provider-specific.
   """
-  @callback fetch_events() :: [map()]
+  @callback fetch_events(config()) :: [map()]
 
   @doc """
   Fetch events with filtering options.
@@ -61,11 +73,8 @@ defmodule Mneme.Learner.CodingAgent.Provider do
     fetch events for these projects.
   - `:since` — map of `%{project_slug => iso8601_timestamp}` to only
     fetch events newer than the given timestamps.
-
-  Providers should implement this for incremental learning support.
-  Default falls back to `fetch_events/0` without filtering.
   """
-  @callback fetch_events(opts :: keyword()) :: [map()]
+  @callback fetch_events(config(), opts :: keyword()) :: [map()]
 
   @doc """
   Extract a single event into a memory-ready extract map.
