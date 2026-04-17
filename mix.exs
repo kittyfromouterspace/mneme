@@ -15,6 +15,7 @@ defmodule Recollect.MixProject do
       description:
         "Pluggable memory engine with vector search, knowledge graphs, and LLM extraction. Supports PostgreSQL (pgvector), SQLite (sqlite-vec), and libSQL.",
       package: package(),
+      docs: docs(),
       dialyzer: [ignore_warnings: ".dialyzer_ignore.exs"]
     ]
   end
@@ -52,6 +53,7 @@ defmodule Recollect.MixProject do
       {:bumblebee, "~> 0.6.0", optional: true},
 
       # Dev/Test tooling
+      {:ex_doc, ">= 0.36.0", only: :dev, runtime: false},
       {:ex_check, "~> 0.16", only: [:dev], runtime: false},
       {:mix_audit, "~> 2.1", only: [:dev], runtime: false},
       {:styler, ">= 0.11.0", only: [:dev, :test], runtime: false},
@@ -69,7 +71,19 @@ defmodule Recollect.MixProject do
   defp package do
     [
       licenses: ["BSD-3-Clause"],
-      links: %{"GitHub" => "https://github.com/kittyfromouterspace/recollect"}
+      links: %{
+        "GitHub" => "https://github.com/kittyfromouterspace/recollect"
+      },
+      files: ~w(lib priv .formatter.exs mix.exs)
+    ]
+  end
+
+  defp docs do
+    [
+      main: "Recollect",
+      source_url: "https://github.com/kittyfromouterspace/recollect",
+      source_ref: "v#{@version}",
+      extras: ["README.md", "LICENSE"]
     ]
   end
 end
