@@ -4,7 +4,7 @@
 
 ## Problem
 
-Mneme currently treats all entries within a scope equally, regardless of the agent's current environment. In human memory, context cues trigger relevant memories — being in a kitchen recalls cooking knowledge, being in a git repo recalls that project's conventions.
+Recollect currently treats all entries within a scope equally, regardless of the agent's current environment. In human memory, context cues trigger relevant memories — being in a kitchen recalls cooking knowledge, being in a git repo recalls that project's conventions.
 
 Currently:
 - All entries in a scope are treated as equally relevant
@@ -21,7 +21,7 @@ Add **context hints** to entries and **context detection** at retrieval time. En
 ┌─────────────────────────────────────────────────────────────┐
 │ Context Signal (transient, derived from environment)        │
 │                                                             │
-│   Mneme.Context.Detector                                    │
+│   Recollect.Context.Detector                                    │
 │   ├── current_git_repo() → %{repo: "owner/repo", branch: "main"} │
 │   ├── current_path() → "/home/user/project/src"            │
 │   └── current_location() → %{lat: 37.7, lon: -122.4}        │
@@ -39,7 +39,7 @@ Add **context hints** to entries and **context detection** at retrieval time. En
 
 ## Schema Changes
 
-Add to `mneme_entries`:
+Add to `recollect_entries`:
 
 ```elixir
 add :context_hints, :map, default: %{}, null: false
@@ -56,7 +56,7 @@ The map stores key-value pairs like:
 ## Context Detection
 
 ```elixir
-defmodule Mneme.Context.Detector do
+defmodule Recollect.Context.Detector do
   @moduldoc """
   Detect current environment context from the running system.
   
@@ -132,14 +132,14 @@ end
 When creating an entry, capture the current context automatically:
 
 ```elixir
-defmodule Mneme.Knowledge do
+defmodule Recollect.Knowledge do
   def remember(content, opts \\ []) do
     # Auto-capture context if not provided
     context_hints = 
       if opts[:context_hints] do
         opts[:context_hints]
       else
-        Mneme.Context.Detector.detect()
+        Recollect.Context.Detector.detect()
       end
     
     # ... existing entry creation with context_hints added
@@ -152,7 +152,7 @@ end
 Add a boost factor to search results based on context match:
 
 ```elixir
-defmodule Mneme.Search.ContextBooster do
+defmodule Recollect.Search.ContextBooster do
   @boost_threshold 0.3  # Only boost if hints match
   @default_boost 0.15   # 15% boost for matching context
 
@@ -191,9 +191,9 @@ end
 ## Integration with Search
 
 ```elixir
-# In Mneme.Search.Vector, after getting vector results:
+# In Recollect.Search.Vector, after getting vector results:
 defp boost_with_context(results, scope_id) do
-  current_context = Mneme.Context.Detector.detect()
+  current_context = Recollect.Context.Detector.detect()
   
   if map_size(current_context) == 0 do
     results
@@ -218,15 +218,15 @@ end
 
 ```elixir
 # Auto-detect current context (default)
-{:ok, entry} = Mneme.remember("Use refterm for terminal performance")
+{:ok, entry} = Recollect.remember("Use refterm for terminal performance")
 
 # Explicit context hints
-{:ok, entry} = Mneme.remember("Use refterm for terminal performance",
+{:ok, entry} = Recollect.remember("Use refterm for terminal performance",
   context_hints: %{repo: "wez/wezterm", os: "linux"}
 )
 
 # Override auto-detection (e.g., creating entry for a different context)
-{:ok, entry} = Mneme.remember("On macOS use Terminal.app",
+{:ok, entry} = Recollect.remember("On macOS use Terminal.app",
   context_hints: %{os: "darwin"}
 )
 ```
@@ -235,15 +235,15 @@ end
 
 ```elixir
 # Uses auto-detected context (current git repo, path, OS)
-{:ok, results} = Mneme.search("terminal performance")
+{:ok, results} = Recollect.search("terminal performance")
 
 # Explicit context override
-{:ok, results} = Mneme.search("terminal performance",
+{:ok, results} = Recollect.search("terminal performance",
   context: %{repo: "wez/wezterm"}
 )
 
 # Disable context boost
-{:ok, results} = Mneme.search("terminal performance",
+{:ok, results} = Recollect.search("terminal performance",
   context_boost: false
 )
 ```
@@ -254,7 +254,7 @@ When migrating code, update context hints:
 
 ```elixir
 # After migrating from webpack to vite
-Mneme.invalidate("webpack",
+Recollect.invalidate("webpack",
   reason: "migrated to vite",
   new_context: %{repo: "my-org/my-app"}
 )
@@ -265,15 +265,15 @@ Mneme.invalidate("webpack",
 ## Migration
 
 ```elixir
-defmodule Mneme.Repo.Migrations.AddContextHints do
+defmodule Recollect.Repo.Migrations.AddContextHints do
   use Ecto.Migration
 
   def change do
-    alter table(:mneme_entries) do
+    alter table(:recollect_entries) do
       add :context_hints, :map, default: %{}, null: false
     end
 
-    create index(:mneme_entries, [:context_hints])
+    create index(:recollect_entries, [:context_hints])
   end
 end
 ```
@@ -281,7 +281,7 @@ end
 ## Configuration
 
 ```elixir
-config :mneme,
+config :recollect,
   context_aware: [
     enabled: true,
     auto_detect: true,

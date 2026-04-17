@@ -4,7 +4,7 @@
 
 ## Problem
 
-Mneme has a `session_summary` entry type, but there's no structured way to express "what to do next" when switching contexts. When an agent pauses work on project A and switches to project B (or ends the day), there's no explicit handoff mechanism.
+Recollect has a `session_summary` entry type, but there's no structured way to express "what to do next" when switching contexts. When an agent pauses work on project A and switches to project B (or ends the day), there's no explicit handoff mechanism.
 
 This leads to:
 - Lost context when resuming work
@@ -49,7 +49,7 @@ add :handoff, :map, default: nil
 ## API
 
 ```elixir
-defmodule Mneme.Handoff do
+defmodule Recollect.Handoff do
   @moduledoc """
   Create and retrieve session handoffs for continuing work across sessions.
   """
@@ -81,7 +81,7 @@ end
 
 ```elixir
 # At end of session
-Mneme.Handoff.create(workspace_id,
+Recollect.Handoff.create(workspace_id,
   what: "Implementing user authentication",
   next: [
     "Add login controller",
@@ -98,7 +98,7 @@ Mneme.Handoff.create(workspace_id,
 )
 
 # At start of next session
-{:ok, handoff} = Mneme.Handoff.get(workspace_id)
+{:ok, handoff} = Recollect.Handoff.get(workspace_id)
 
 if handoff do
   IO.puts("Continuing: #{handoff.what}")
@@ -114,17 +114,17 @@ Handoffs feed directly into working memory on session start:
 # On session start (new scope or fresh scope)
 def on_session_start(scope_id) do
   # Load previous handoff into working memory
-  case Mneme.Handoff.get(scope_id) do
+  case Recollect.Handoff.get(scope_id) do
     {:ok, handoff} when not is_nil(handoff) ->
       # Push handoff items to working memory
-      Mneme.WorkingMemory.push(scope_id, "📋 Previous context: #{handoff.what}")
+      Recollect.WorkingMemory.push(scope_id, "📋 Previous context: #{handoff.what}")
       
       for next_step <- handoff.next do
-        Mneme.WorkingMemory.push(scope_id, "→ #{next_step}", importance: 0.8)
+        Recollect.WorkingMemory.push(scope_id, "→ #{next_step}", importance: 0.8)
       end
       
       for artifact <- handoff.artifacts do
-        Mneme.WorkingMemory.push(scope_id, "📎 #{artifact}", importance: 0.7)
+        Recollect.WorkingMemory.push(scope_id, "📎 #{artifact}", importance: 0.7)
       end
     
     _ ->
@@ -163,15 +163,15 @@ end
 ## Migration
 
 ```elixir
-defmodule Mneme.Repo.Migrations.AddHandoff do
+defmodule Recollect.Repo.Migrations.AddHandoff do
   use Ecto.Migration
 
   def change do
-    alter table(:mneme_entries) do
+    alter table(:recollect_entries) do
       add :handoff, :map
     end
 
-    create index(:mneme_entries, [:entry_type])  # For faster session_summary queries
+    create index(:recollect_entries, [:entry_type])  # For faster session_summary queries
   end
 end
 ```
@@ -179,7 +179,7 @@ end
 ## Configuration
 
 ```elixir
-config :mneme,
+config :recollect,
   handoff: [
     enabled: true,
     auto_load: true,  # Load handoff into working memory on session start

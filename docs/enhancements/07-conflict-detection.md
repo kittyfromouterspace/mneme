@@ -4,7 +4,7 @@
 
 ## Problem
 
-Mneme has a `contradicts` edge type but no automatic detection of contradictory memories. When two entries make opposing claims (e.g., "feature X is enabled" vs "feature X is disabled"), both can coexist silently, leading to agent confusion. Hippo detects contradictions during consolidation and flags them for resolution.
+Recollect has a `contradicts` edge type but no automatic detection of contradictory memories. When two entries make opposing claims (e.g., "feature X is enabled" vs "feature X is disabled"), both can coexist silently, leading to agent confusion. Hippo detects contradictions during consolidation and flags them for resolution.
 
 ## Solution
 
@@ -12,10 +12,10 @@ Add automatic conflict detection that identifies entries with overlapping conten
 
 ## Schema
 
-New table `mneme_conflicts`:
+New table `recollect_conflicts`:
 
 ```elixir
-create table(:mneme_conflicts, primary_key: false) do
+create table(:recollect_conflicts, primary_key: false) do
   add :id, :binary_id, primary_key: true
   add :owner_id, :binary_id, null: false
   add :scope_id, :binary_id, null: false
@@ -29,10 +29,10 @@ create table(:mneme_conflicts, primary_key: false) do
   add :updated_at, :utc_datetime_usec
 end
 
-create index(:mneme_conflicts, [:scope_id, :status])
-create index(:mneme_conflicts, [:entry_a_id])
-create index(:mneme_conflicts, [:entry_b_id])
-create unique_index(:mneme_conflicts, [:entry_a_id, :entry_b_id])
+create index(:recollect_conflicts, [:scope_id, :status])
+create index(:recollect_conflicts, [:entry_a_id])
+create index(:recollect_conflicts, [:entry_b_id])
+create unique_index(:recollect_conflicts, [:entry_a_id, :entry_b_id])
 ```
 
 ## Conflict Detection — Parallel with Task.async_stream
@@ -40,7 +40,7 @@ create unique_index(:mneme_conflicts, [:entry_a_id, :entry_b_id])
 The detection algorithm is O(n²) pairwise comparison. For 100 entries, that's ~5000 comparisons — perfect for `Task.async_stream`:
 
 ```elixir
-defmodule Mneme.ConflictDetection do
+defmodule Recollect.ConflictDetection do
   @conflict_threshold 0.55
 
   @doc """
@@ -219,10 +219,10 @@ defmodule Mneme.ConflictDetection do
   end
 
   defp get_active_entries(scope_id) do
-    repo = Mneme.Config.repo()
+    repo = Recollect.Config.repo()
 
     repo.query("""
-      SELECT id, content, tags_json FROM mneme_entries
+      SELECT id, content, tags_json FROM recollect_entries
       WHERE scope_id = $1 AND entry_type != 'archived'
     """, [scope_id])
     |> case do
@@ -245,14 +245,14 @@ end
 ## Conflict Resolution API
 
 ```elixir
-defmodule Mneme.Conflicts do
+defmodule Recollect.Conflicts do
   @doc "List open conflicts for a scope."
   def list(scope_id) do
-    repo = Mneme.Config.repo()
+    repo = Recollect.Config.repo()
 
     repo.query("""
       SELECT id, entry_a_id, entry_b_id, reason, score, status, detected_at
-      FROM mneme_conflicts
+      FROM recollect_conflicts
       WHERE scope_id = $1 AND status = 'open'
       ORDER BY score DESC
     """, [scope_id])
@@ -268,7 +268,7 @@ defmodule Mneme.Conflicts do
   The loser's half-life is halved.
   """
   def resolve(conflict_id, keep_entry_id) do
-    repo = Mneme.Config.repo()
+    repo = Recollect.Config.repo()
 
     # Get conflict details
     {:ok, %{rows: [[loser_id]]}} = repo.query("""
@@ -276,20 +276,20 @@ defmodule Mneme.Conflicts do
         WHEN entry_a_id = $1 THEN entry_b_id
         ELSE entry_a_id
       END
-      FROM mneme_conflicts WHERE id = $2
+      FROM recollect_conflicts WHERE id = $2
     """, [keep_entry_id, conflict_id])
 
     repo.transaction(fn ->
       # Mark conflict as resolved
       repo.query("""
-        UPDATE mneme_conflicts
+        UPDATE recollect_conflicts
         SET status = 'resolved', resolved_by = $1, updated_at = $2
         WHERE id = $3
       """, [keep_entry_id, DateTime.utc_now(), conflict_id])
 
       # Weaken loser
       repo.query("""
-        UPDATE mneme_entries
+        UPDATE recollect_entries
         SET half_life_days = GREATEST(1, half_life_days / 2), updated_at = $1
         WHERE id = $2
       """, [DateTime.utc_now(), loser_id])
@@ -298,24 +298,24 @@ defmodule Mneme.Conflicts do
 
   @doc "Resolve a conflict by deleting the losing entry."
   def resolve_and_forget(conflict_id, keep_entry_id) do
-    repo = Mneme.Config.repo()
+    repo = Recollect.Config.repo()
 
     {:ok, %{rows: [[loser_id]]}} = repo.query("""
       SELECT CASE
         WHEN entry_a_id = $1 THEN entry_b_id
         ELSE entry_a_id
       END
-      FROM mneme_conflicts WHERE id = $2
+      FROM recollect_conflicts WHERE id = $2
     """, [keep_entry_id, conflict_id])
 
     repo.transaction(fn ->
       repo.query("""
-        UPDATE mneme_conflicts
+        UPDATE recollect_conflicts
         SET status = 'resolved', resolved_by = $1, updated_at = $2
         WHERE id = $3
       """, [keep_entry_id, DateTime.utc_now(), conflict_id])
 
-      repo.query("DELETE FROM mneme_entries WHERE id = $1", [loser_id])
+      repo.query("DELETE FROM recollect_entries WHERE id = $1", [loser_id])
     end)
   end
 end
@@ -330,7 +330,7 @@ def consolidate(scope_id, opts \\ []) do
   # ... decay pass, merge pass ...
 
   # Conflict detection pass (parallel via Task.async_stream)
-  conflicts = Mneme.ConflictDetection.detect(scope_id)
+  conflicts = Recollect.ConflictDetection.detect(scope_id)
   persist_conflicts(scope_id, conflicts)
 
   %{conflicts_detected: length(conflicts)}
@@ -360,11 +360,11 @@ end
 ## Migration
 
 ```elixir
-defmodule Mneme.Repo.Migrations.AddConflictDetection do
+defmodule Recollect.Repo.Migrations.AddConflictDetection do
   use Ecto.Migration
 
   def change do
-    create table(:mneme_conflicts, primary_key: false) do
+    create table(:recollect_conflicts, primary_key: false) do
       add :id, :binary_id, primary_key: true
       add :owner_id, :binary_id, null: false
       add :scope_id, :binary_id, null: false
@@ -378,10 +378,10 @@ defmodule Mneme.Repo.Migrations.AddConflictDetection do
       add :updated_at, :utc_datetime_usec
     end
 
-    create index(:mneme_conflicts, [:scope_id, :status])
-    create index(:mneme_conflicts, [:entry_a_id])
-    create index(:mneme_conflicts, [:entry_b_id])
-    create unique_index(:mneme_conflicts, [:entry_a_id, :entry_b_id])
+    create index(:recollect_conflicts, [:scope_id, :status])
+    create index(:recollect_conflicts, [:entry_a_id])
+    create index(:recollect_conflicts, [:entry_b_id])
+    create unique_index(:recollect_conflicts, [:entry_a_id, :entry_b_id])
   end
 end
 ```

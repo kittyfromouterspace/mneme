@@ -6,7 +6,7 @@
 
 ### Current state
 
-`Mneme.Learner.Git.StackDetector` detects technology transitions using:
+`Recollect.Learner.Git.StackDetector` detects technology transitions using:
 
 1. A hardcoded `@technology_map` (~30 technologies in 10 categories)
 2. A hardcoded `@category_transitions` catalog (~25 known migration paths)

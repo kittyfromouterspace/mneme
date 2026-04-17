@@ -6,7 +6,7 @@
 
 ## Problem
 
-Mneme currently relies on explicit calls to `Mneme.remember/2` for all knowledge ingestion. There's no system for automatically extracting knowledge from external sources like:
+Recollect currently relies on explicit calls to `Recollect.remember/2` for all knowledge ingestion. There's no system for automatically extracting knowledge from external sources like:
 - Git history (commits, branches, PRs)
 - Code review feedback
 - CI/CD failures
@@ -23,15 +23,15 @@ A pluggable **Learning System** that observes external sources and creates memor
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Mneme.Learning                          │
+│                    Recollect.Learning                          │
 │                                                             │
 │   ┌─────────────────────────────────────────────────────┐   │
 │   │ Learners (pluggable) — "ingest" stage               │   │
 │   │                                                      │   │
-│   │ ├── Mneme.Learner.Git                               │   │
-│   │ ├── Mneme.Learner.Terminal                          │   │
-│   │ ├── Mneme.Learner.CI                                │   │
-│   │ └── Mneme.Learner.Documentation                     │   │
+│   │ ├── Recollect.Learner.Git                               │   │
+│   │ ├── Recollect.Learner.Terminal                          │   │
+│   │ ├── Recollect.Learner.CI                                │   │
+│   │ └── Recollect.Learner.Documentation                     │   │
 │   └─────────────────────────────────────────────────────┘   │
 │                          │                                  │
 │                          ▼                                  │
@@ -56,10 +56,10 @@ A pluggable **Learning System** that observes external sources and creates memor
 
 ## Core Concept: Learner Behaviour
 
-Each learner implements the `Mneme.Learner` behaviour:
+Each learner implements the `Recollect.Learner` behaviour:
 
 ```elixir
-defmodule Mneme.Learner do
+defmodule Recollect.Learner do
   @moduledoc """
   Behaviour for learning modules that extract knowledge from external sources.
   
@@ -98,7 +98,7 @@ end
 ## Git Learner (Initial Implementation)
 
 ```elixir
-defmodule Mneme.Learner.Git do
+defmodule Recollect.Learner.Git do
   @moduledoc """
   Learn from git history — commits, branches, tags.
   
@@ -110,7 +110,7 @@ defmodule Mneme.Learner.Git do
   - Documentation changes ("docs", "readme")
   """
 
-  @behaviour Mneme.Learner
+  @behaviour Recollect.Learner
 
   @impl true
   def source, do: :git
@@ -181,7 +181,7 @@ end
 ## Terminal Learner
 
 ```elixir
-defmodule Mneme.Learner.Terminal do
+defmodule Recollect.Learner.Terminal do
   @moduledoc """
   Learn from command history — successful commands, failed commands.
   
@@ -191,7 +191,7 @@ defmodule Mneme.Learner.Terminal do
   - Directory-specific patterns
   """
 
-  @behaviour Mneme.Learner
+  @behaviour Recollect.Learner
 
   @impl true
   def source, do: :terminal
@@ -253,7 +253,7 @@ end
 ## Learning API
 
 ```elixir
-defmodule Mneme.Learning do
+defmodule Recollect.Learning do
   @moduledoc """
   Orchestrate learning from multiple sources.
   """
@@ -290,7 +290,7 @@ The learning system follows Cognee's pipeline architecture:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  Mneme.Learning.run()                                              │
+│  Recollect.Learning.run()                                              │
 │                                                                     │
 │  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐           │
 │  │   Ingest     │ → │   Cognify     │ → │   Memify     │           │
@@ -312,7 +312,7 @@ Each learner fetches events from its source:
 Events are extracted into memory entries:
 
 ```elixir
-# This is what happens inside Mneme.Learning.run/1
+# This is what happens inside Recollect.Learning.run/1
 for learner <- enabled_learners do
   {:ok, events} = learner.fetch_since(since, scope_id)
   
@@ -320,7 +320,7 @@ for learner <- enabled_learners do
     case learner.extract(event) do
       {:ok, extract} ->
         # Transform: event → memory entry
-        Mneme.remember(extract.content,
+        Recollect.remember(extract.content,
           entry_type: extract.entry_type,
           emotional_valence: extract.emotional_valence,
           tags: extract.tags,
@@ -345,13 +345,13 @@ After learning, run enrichment on created entries:
 # Post-learning enrichment
 defp memify_stage(entries, scope_id) do
   # Entity consolidation (merge duplicate entities)
-  Mneme.Learning.EntityConsolidation.run(entries)
+  Recollect.Learning.EntityConsolidation.run(entries)
   
   # Graph enrichment (build relationships between new entries)
-  Mneme.Learning.GraphEnrichment.run(entries)
+  Recollect.Learning.GraphEnrichment.run(entries)
   
   # Schema acceleration (update tag frequency index)
-  Mneme.SchemaIndex.rebuild()
+  Recollect.SchemaIndex.rebuild()
 end
 ```
 
@@ -364,20 +364,20 @@ This mirrors Cognee's approach:
 
 ```elixir
 # Run all enabled learners
-{:ok, result} = Mneme.Learning.run(scope_id: workspace_id)
+{:ok, result} = Recollect.Learning.run(scope_id: workspace_id)
 # => %{git: %{learned: 5}, terminal: %{learned: 3}}
 
 # Run specific source only
-{:ok, result} = Mneme.Learning.run(scope_id: workspace_id, sources: [:git])
+{:ok, result} = Recollect.Learning.run(scope_id: workspace_id, sources: [:git])
 
 # Preview what would be learned (dry run)
-{:ok, preview} = Mneme.Learning.run(scope_id: workspace_id, dry_run: true)
+{:ok, preview} = Recollect.Learning.run(scope_id: workspace_id, dry_run: true)
 ```
 
 ## Configuration
 
 ```elixir
-config :mneme,
+config :recollect,
   learning: [
     enabled: true,
     sources: [:git, :terminal],
@@ -408,13 +408,13 @@ config :mneme,
 Learning runs as part of the consolidation cycle:
 
 ```elixir
-defmodule Mneme.Consolidation do
+defmodule Recollect.Consolidation do
   defp run_passes(scope_id, opts) do
     # ... existing passes ...
     
     # New: Learning pass
     if Keyword.get(opts, :run_learning, true) do
-      Mneme.Learning.run(scope_id: scope_id)
+      Recollect.Learning.run(scope_id: scope_id)
     end
   end
 end
@@ -423,7 +423,7 @@ end
 ## Telemetry
 
 ```elixir
-Mneme.Telemetry.event([:mneme, :learning, :source, :stop], %{
+Recollect.Telemetry.event([:recollect, :learning, :source, :stop], %{
   source: :git,
   events_fetched: 15,
   events_learned: 8,
@@ -435,16 +435,16 @@ Mneme.Telemetry.event([:mneme, :learning, :source, :stop], %{
 ## Migration
 
 ```elixir
-defmodule Mneme.Repo.Migrations.AddSourceTracking do
+defmodule Recollect.Repo.Migrations.AddSourceTracking do
   use Ecto.Migration
 
   def change do
-    alter table(:mneme_entries) do
+    alter table(:recollect_entries) do
       add :source, :string
       add :source_metadata, :map
     end
 
-    create index(:mneme_entries, [:source])
+    create index(:recollect_entries, [:source])
   end
 end
 ```
@@ -469,8 +469,8 @@ end
 To add a new source (e.g., CI failures):
 
 ```elixir
-defmodule Mneme.Learner.CI do
-  @behaviour Mneme.Learner
+defmodule Recollect.Learner.CI do
+  @behaviour Recollect.Learner
 
   @impl true
   def source, do: :ci
@@ -495,7 +495,7 @@ end
 
 Then add to config:
 ```elixir
-config :mneme,
+config :recollect,
   learning: [sources: [:git, :terminal, :ci]]
 ```
 

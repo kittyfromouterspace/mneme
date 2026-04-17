@@ -1,4 +1,4 @@
-defmodule Mneme.DataCase do
+defmodule Recollect.DataCase do
   @moduledoc """
   Test case with Ecto Sandbox for database testing.
   """
@@ -9,20 +9,20 @@ defmodule Mneme.DataCase do
 
   using do
     quote do
-      import Mneme.Fixtures
+      import Recollect.Fixtures
 
-      alias Mneme.Config
-      alias Mneme.Fixtures
+      alias Recollect.Config
+      alias Recollect.Fixtures
     end
   end
 
   setup tags do
-    Mneme.DataCase.setup_sandbox(tags)
+    Recollect.DataCase.setup_sandbox(tags)
     :ok
   end
 
   def setup_sandbox(tags) do
-    pid = Sandbox.start_owner!(Mneme.TestRepo, shared: not tags[:async])
+    pid = Sandbox.start_owner!(Recollect.TestRepo, shared: not tags[:async])
     on_exit(fn -> Sandbox.stop_owner(pid) end)
   end
 end

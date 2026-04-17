@@ -4,7 +4,7 @@
 
 ## Problem
 
-Mneme has no way to learn whether recalled memories were actually helpful. The system returns search results but never receives signal about their usefulness. This creates an open loop — memories that are irrelevant to the task at hand persist just as long as helpful ones.
+Recollect has no way to learn whether recalled memories were actually helpful. The system returns search results but never receives signal about their usefulness. This creates an open loop — memories that are irrelevant to the task at hand persist just as long as helpful ones.
 
 Hippo closes this loop with `hippo outcome --good/--bad`, which adjusts half-life based on whether the recalled memories helped.
 
@@ -14,7 +14,7 @@ Add outcome feedback API that adjusts the half-life of recently retrieved entrie
 
 ## Schema Changes
 
-Add to `mneme_entries`:
+Add to `recollect_entries`:
 
 ```elixir
 add :outcome_score, :integer, null: true
@@ -24,7 +24,7 @@ add :outcome_score, :integer, null: true
 ## ETS-Based Last-Retrieved Tracking
 
 ```elixir
-defmodule Mneme.OutcomeTracker do
+defmodule Recollect.OutcomeTracker do
   @moduledoc """
   ETS table for tracking the last-retrieved entry IDs per scope.
 
@@ -32,7 +32,7 @@ defmodule Mneme.OutcomeTracker do
   that search writes to and outcome feedback reads from.
   """
 
-  @table :mneme_last_retrieved
+  @table :recollect_last_retrieved
 
   @doc "Initialize the ETS table. Call from Application.start/2."
   def init do
@@ -57,19 +57,19 @@ end
 ## Outcome API
 
 ```elixir
-defmodule Mneme.Outcome do
+defmodule Recollect.Outcome do
   @positive_delta 5
   @negative_delta -3
 
   @doc "Apply positive outcome to the last-retrieved entries for a scope."
   def good(scope_id, opts \\ []) do
-    entry_ids = Mneme.OutcomeTracker.get(scope_id)
+    entry_ids = Recollect.OutcomeTracker.get(scope_id)
     apply_outcome(entry_ids, :good, opts)
   end
 
   @doc "Apply negative outcome to the last-retrieved entries for a scope."
   def bad(scope_id, opts \\ []) do
-    entry_ids = Mneme.OutcomeTracker.get(scope_id)
+    entry_ids = Recollect.OutcomeTracker.get(scope_id)
     apply_outcome(entry_ids, :bad, opts)
   end
 
@@ -81,10 +81,10 @@ defmodule Mneme.Outcome do
   defp apply_outcome([], _direction, _opts), do: {:ok, 0}
 
   defp apply_outcome(entry_ids, :good, _opts) do
-    delta = Mneme.Config.get([:outcome_feedback, :positive_half_life_delta], @positive_delta)
+    delta = Recollect.Config.get([:outcome_feedback, :positive_half_life_delta], @positive_delta)
 
-    Mneme.Config.repo().query("""
-      UPDATE mneme_entries
+    Recollect.Config.repo().query("""
+      UPDATE recollect_entries
       SET half_life_days = GREATEST(1, half_life_days + $1),
           outcome_score = 1,
           updated_at = $2
@@ -95,10 +95,10 @@ defmodule Mneme.Outcome do
   end
 
   defp apply_outcome(entry_ids, :bad, _opts) do
-    delta = abs(Mneme.Config.get([:outcome_feedback, :negative_half_life_delta], @negative_delta))
+    delta = abs(Recollect.Config.get([:outcome_feedback, :negative_half_life_delta], @negative_delta))
 
-    Mneme.Config.repo().query("""
-      UPDATE mneme_entries
+    Recollect.Config.repo().query("""
+      UPDATE recollect_entries
       SET half_life_days = GREATEST(1, half_life_days - $1),
           outcome_score = -1,
           updated_at = $2
@@ -112,7 +112,7 @@ end
 
 ## Integration with Search
 
-In `Mneme.Search.Vector.do_search_entries/4`, after returning results:
+In `Recollect.Search.Vector.do_search_entries/4`, after returning results:
 
 ```elixir
 defp do_search_entries(embedding_str, scope_id, limit, min_score) do
@@ -125,7 +125,7 @@ defp do_search_entries(embedding_str, scope_id, limit, min_score) do
 
       # Track for outcome feedback
       entry_ids = Enum.map(results, & &1["id"]) |> Enum.reject(&is_nil/1)
-      if entry_ids != [], do: Mneme.OutcomeTracker.set(scope_id, entry_ids)
+      if entry_ids != [], do: Recollect.OutcomeTracker.set(scope_id, entry_ids)
 
       {:ok, results}
 
@@ -138,7 +138,7 @@ end
 ## Configuration
 
 ```elixir
-config :mneme,
+config :recollect,
   outcome_feedback: [
     enabled: true,
     positive_half_life_delta: 5,
@@ -148,22 +148,22 @@ config :mneme,
 
 ## Application Startup
 
-Add ETS init to `Mneme.Application`:
+Add ETS init to `Recollect.Application`:
 
 ```elixir
 def start(_type, _args) do
   children = [
-    {Task.Supervisor, name: Mneme.TaskSupervisor},
-    {Registry, keys: :unique, name: Mneme.WorkingMemory.Registry},
-    {DynamicSupervisor, strategy: :one_for_one, name: Mneme.WorkingMemory.Supervisor},
-    Mneme.RetrievalCounter
+    {Task.Supervisor, name: Recollect.TaskSupervisor},
+    {Registry, keys: :unique, name: Recollect.WorkingMemory.Registry},
+    {DynamicSupervisor, strategy: :one_for_one, name: Recollect.WorkingMemory.Supervisor},
+    Recollect.RetrievalCounter
   ]
 
-  opts = [strategy: :one_for_one, name: Mneme.Supervisor]
+  opts = [strategy: :one_for_one, name: Recollect.Supervisor]
   sup = Supervisor.start_link(children, opts)
 
   # Initialize ETS tables (no process owner needed)
-  Mneme.OutcomeTracker.init()
+  Recollect.OutcomeTracker.init()
 
   sup
 end
@@ -172,11 +172,11 @@ end
 ## Migration
 
 ```elixir
-defmodule Mneme.Repo.Migrations.AddOutcomeFeedback do
+defmodule Recollect.Repo.Migrations.AddOutcomeFeedback do
   use Ecto.Migration
 
   def change do
-    alter table(:mneme_entries) do
+    alter table(:recollect_entries) do
       add :outcome_score, :integer, null: true
     end
   end

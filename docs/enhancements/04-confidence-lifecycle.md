@@ -4,7 +4,7 @@
 
 ## Problem
 
-Mneme's `confidence` field is a static float (0.0–1.0) set at creation time. It never changes, even if the entry goes unused for months. In Hippo, confidence is a **lifecycle state** — memories that haven't been retrieved in 30+ days are automatically marked `stale`, and if they're recalled again, they wake back up to `observed` so they can earn trust again.
+Recollect's `confidence` field is a static float (0.0–1.0) set at creation time. It never changes, even if the entry goes unused for months. In Hippo, confidence is a **lifecycle state** — memories that haven't been retrieved in 30+ days are automatically marked `stale`, and if they're recalled again, they wake back up to `observed` so they can earn trust again.
 
 ## Solution
 
@@ -12,7 +12,7 @@ Add `confidence_state` column with automatic state transitions computed on-read.
 
 ## Schema Changes
 
-Add to `mneme_entries`:
+Add to `recollect_entries`:
 
 ```elixir
 add :confidence_state, :string, default: "active", null: false
@@ -42,7 +42,7 @@ add :confidence_state, :string, default: "active", null: false
 ## Implementation — Pure Functions
 
 ```elixir
-defmodule Mneme.Confidence do
+defmodule Recollect.Confidence do
   @stale_threshold_days 30
 
   @doc """
@@ -99,12 +99,12 @@ end
 When an entry is retrieved, check if it was stale and wake it up:
 
 ```elixir
-# In Mneme.Search.Vector, after bump_access:
+# In Recollect.Search.Vector, after bump_access:
 defp maybe_wake_stale_entries(results, repo) do
   for %{"id" => id, "confidence_state" => "stale"} <- results do
-    Task.Supervisor.start_child(Mneme.Config.task_supervisor(), fn ->
+    Task.Supervisor.start_child(Recollect.Config.task_supervisor(), fn ->
       repo.query(
-        "UPDATE mneme_entries SET confidence_state = 'observed', updated_at = $1 WHERE id = $2",
+        "UPDATE recollect_entries SET confidence_state = 'observed', updated_at = $1 WHERE id = $2",
         [DateTime.utc_now(), id]
       )
     end)
@@ -117,9 +117,9 @@ end
 During decay pass, stale entries get archived faster:
 
 ```elixir
-defmodule Mneme.Maintenance.Decay do
+defmodule Recollect.Maintenance.Decay do
   defp should_archive?(entry) do
-    state = Mneme.Confidence.resolve_state(entry)
+    state = Recollect.Confidence.resolve_state(entry)
 
     cond do
       state == "verified" -> false
@@ -136,7 +136,7 @@ Include confidence state in context output:
 
 ```elixir
 def format_entry(entry) do
-  state = Mneme.Confidence.resolve_state(entry)
+  state = Recollect.Confidence.resolve_state(entry)
 
   prefix = case state do
     "verified" -> "[verified]"
@@ -152,7 +152,7 @@ end
 ## Configuration
 
 ```elixir
-config :mneme,
+config :recollect,
   confidence_lifecycle: [
     enabled: true,
     stale_threshold_days: 30,
@@ -163,15 +163,15 @@ config :mneme,
 ## Migration
 
 ```elixir
-defmodule Mneme.Repo.Migrations.AddConfidenceLifecycle do
+defmodule Recollect.Repo.Migrations.AddConfidenceLifecycle do
   use Ecto.Migration
 
   def change do
-    alter table(:mneme_entries) do
+    alter table(:recollect_entries) do
       add :confidence_state, :string, default: "active", null: false
     end
 
-    create index(:mneme_entries, [:confidence_state])
+    create index(:recollect_entries, [:confidence_state])
   end
 end
 ```

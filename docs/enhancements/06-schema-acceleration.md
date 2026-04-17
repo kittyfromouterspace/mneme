@@ -4,7 +4,7 @@
 
 ## Problem
 
-Mneme treats all new entries the same regardless of how well they fit existing knowledge patterns. In Hippo, `schema_fit` computes how well new content fits the existing knowledge schema. Familiar memories consolidate faster; novel ones decay faster if unused.
+Recollect treats all new entries the same regardless of how well they fit existing knowledge patterns. In Hippo, `schema_fit` computes how well new content fits the existing knowledge schema. Familiar memories consolidate faster; novel ones decay faster if unused.
 
 The naive approach — `Repo.all()` every entry on every insert — is O(n) DB queries. With ETS, this becomes O(1).
 
@@ -14,7 +14,7 @@ Add `schema_fit` scoring with an ETS-backed tag frequency index that is rebuilt 
 
 ## Schema Changes
 
-Add to `mneme_entries`:
+Add to `recollect_entries`:
 
 ```elixir
 add :schema_fit, :float, default: 0.5, null: false
@@ -23,7 +23,7 @@ add :schema_fit, :float, default: 0.5, null: false
 ## ETS Schema Index
 
 ```elixir
-defmodule Mneme.SchemaIndex do
+defmodule Recollect.SchemaIndex do
   @moduledoc """
   ETS table for schema acceleration data.
 
@@ -31,7 +31,7 @@ defmodule Mneme.SchemaIndex do
   No GenServer owner — public table, written by consolidation, read by everyone.
   """
 
-  @table :mneme_schema_index
+  @table :recollect_schema_index
 
   @doc "Initialize the ETS table. Call from Application.start/2."
   def init do
@@ -42,7 +42,7 @@ defmodule Mneme.SchemaIndex do
   def rebuild(repo) do
     # Single query: get content and tags for all non-archived entries
     rows = repo.query("""
-      SELECT content, tags_json FROM mneme_entries WHERE entry_type != 'archived'
+      SELECT content, tags_json FROM recollect_entries WHERE entry_type != 'archived'
     """)
 
     entries = case rows do
@@ -91,14 +91,14 @@ end
 ## Computation
 
 ```elixir
-defmodule Mneme.SchemaFit do
+defmodule Recollect.SchemaFit do
   @doc """
   Compute how well new content fits existing knowledge patterns.
   Returns 0.0..1.0. Uses ETS for O(1) tag frequency lookup.
   """
   def compute(content, tags, _scope_id) do
-    tag_freq = Mneme.SchemaIndex.tag_frequency()
-    n = Mneme.SchemaIndex.entry_count()
+    tag_freq = Recollect.SchemaIndex.tag_frequency()
+    n = Recollect.SchemaIndex.entry_count()
 
     if n == 0 do
       0.5  # no schema yet, neutral
@@ -145,7 +145,7 @@ defmodule Mneme.SchemaFit do
     else
       # Content overlap requires DB query — use Task.async_stream for parallelism
       # This is the expensive part; tag overlap (above) is the fast path
-      repo = Mneme.Config.repo()
+      repo = Recollect.Config.repo()
       entries = fetch_entries_for_overlap(scope_id, repo)
 
       matches = Enum.count(entries, fn entry ->
@@ -178,7 +178,7 @@ defmodule Mneme.SchemaFit do
   defp fetch_entries_for_overlap(scope_id, repo) do
     # Limit to most recent 500 entries for performance
     repo.query("""
-      SELECT content FROM mneme_entries
+      SELECT content FROM recollect_entries
       WHERE scope_id = $1 AND entry_type != 'archived'
       ORDER BY inserted_at DESC
       LIMIT 500
@@ -211,7 +211,7 @@ def remember(content, opts \\ []) do
   tags = opts[:tags] || []
   scope_id = opts[:scope_id]
 
-  schema_fit = Mneme.SchemaFit.compute(content, tags, scope_id)
+  schema_fit = Recollect.SchemaFit.compute(content, tags, scope_id)
   base_half_life = opts[:half_life_days] || 7.0
   adjusted_half_life = adjust_half_life_for_schema_fit(base_half_life, schema_fit)
 
@@ -226,7 +226,7 @@ end
 ## Configuration
 
 ```elixir
-config :mneme,
+config :recollect,
   schema_acceleration: [
     enabled: true,
     high_fit_threshold: 0.7,
@@ -239,23 +239,23 @@ config :mneme,
 ## Application Startup
 
 ```elixir
-# In Mneme.Application.start/2:
-Mneme.SchemaIndex.init()
+# In Recollect.Application.start/2:
+Recollect.SchemaIndex.init()
 # Initial rebuild is deferred — run first consolidation to populate
 ```
 
 ## Migration
 
 ```elixir
-defmodule Mneme.Repo.Migrations.AddSchemaAcceleration do
+defmodule Recollect.Repo.Migrations.AddSchemaAcceleration do
   use Ecto.Migration
 
   def change do
-    alter table(:mneme_entries) do
+    alter table(:recollect_entries) do
       add :schema_fit, :float, default: 0.5, null: false
     end
 
-    create index(:mneme_entries, [:schema_fit])
+    create index(:recollect_entries, [:schema_fit])
   end
 end
 ```

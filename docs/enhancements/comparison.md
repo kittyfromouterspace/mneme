@@ -1,8 +1,8 @@
-# Mneme vs Hippo: Concept Comparison
+# Recollect vs Hippo: Concept Comparison
 
 ## Architecture Comparison
 
-| Aspect | Mneme | Hippo |
+| Aspect | Recollect | Hippo |
 |--------|-------|-------|
 | **Language** | Elixir (OTP) | TypeScript (Node.js) |
 | **Storage** | PostgreSQL (pgvector) | SQLite + markdown mirrors |
@@ -15,7 +15,7 @@
 
 ## Feature Matrix
 
-| Feature | Mneme | Hippo | Enhancement |
+| Feature | Recollect | Hippo | Enhancement |
 |---------|-------|-------|-------------|
 | **Decay** | Basic (archive after N days, low access) | Half-life formula with exponential decay | [01](01-retrieval-strengthening.md) |
 | **Retrieval strengthening** | No | Half-life +2 days per retrieval | [01](01-retrieval-strengthening.md) |
@@ -36,9 +36,9 @@
 
 ## Elixir OTP Optimizations
 
-Where Hippo uses database tables or sequential processing, Mneme leverages OTP primitives:
+Where Hippo uses database tables or sequential processing, Recollect leverages OTP primitives:
 
-| Concept | Hippo Implementation | Mneme Implementation | Why |
+| Concept | Hippo Implementation | Recollect Implementation | Why |
 |---------|---------------------|---------------------|-----|
 | Working memory | SQLite table | **GenServer per scope** + DynamicSupervisor | Ephemeral, bounded, session-scoped — no persistence needed |
 | Retrieval counters | In-memory variable | **ETS `:counter`** + GenServer periodic flush | Lock-free increments, batch DB writes |
@@ -48,42 +48,42 @@ Where Hippo uses database tables or sequential processing, Mneme leverages OTP p
 | Consolidation merge | Sequential overlap computation | **`Task.async_stream`** parallel comparison | CPU-bound, uses all cores |
 | Emotional multipliers | Module constant | **`:persistent_term`** | O(1) read, no config lookup |
 
-## What Mneme Does Better
+## What Recollect Does Better
 
-1. **Knowledge graph** — Mneme has full entity/relation extraction and graph traversal. Hippo has flat entries with no graph structure.
+1. **Knowledge graph** — Recollect has full entity/relation extraction and graph traversal. Hippo has flat entries with no graph structure.
 
-2. **Document pipeline** — Mneme ingests documents, chunks them, embeds chunks, and extracts entities. Hippo only stores single-entry memories.
+2. **Document pipeline** — Recollect ingests documents, chunks them, embeds chunks, and extracts entities. Hippo only stores single-entry memories.
 
-3. **Pluggable backends** — Mneme's behaviours (`EmbeddingProvider`, `ExtractionProvider`, `GraphStore`) allow swapping implementations. Hippo is tightly coupled to SQLite.
+3. **Pluggable backends** — Recollect's behaviours (`EmbeddingProvider`, `ExtractionProvider`, `GraphStore`) allow swapping implementations. Hippo is tightly coupled to SQLite.
 
-4. **Multi-tenancy** — Mneme's `owner_id` + `scope_id` model is more flexible than Hippo's local/global file structure for multi-user applications.
+4. **Multi-tenancy** — Recollect's `owner_id` + `scope_id` model is more flexible than Hippo's local/global file structure for multi-user applications.
 
-5. **Embedding quality** — Mneme uses production embedding APIs (OpenRouter, OpenAI, Ollama). Hippo's optional local model is lower quality.
+5. **Embedding quality** — Recollect uses production embedding APIs (OpenRouter, OpenAI, Ollama). Hippo's optional local model is lower quality.
 
-6. **Graph search** — Mneme can traverse edges to find related knowledge. Hippo has no graph traversal.
+6. **Graph search** — Recollect can traverse edges to find related knowledge. Hippo has no graph traversal.
 
-7. **Concurrency** — Mneme uses OTP processes, ETS, and `Task.async_stream` for parallel operations. Hippo is single-threaded Node.js.
+7. **Concurrency** — Recollect uses OTP processes, ETS, and `Task.async_stream` for parallel operations. Hippo is single-threaded Node.js.
 
 ## What Hippo Does Better
 
-1. **Biological fidelity** — Hippo implements all 7 hippocampal mechanisms. Mneme implements 2 (decay, basic confidence).
+1. **Biological fidelity** — Hippo implements all 7 hippocampal mechanisms. Recollect implements 2 (decay, basic confidence).
 
-2. **Forgetting as feature** — Hippo's decay is active filtering. Mneme's decay is cleanup.
+2. **Forgetting as feature** — Hippo's decay is active filtering. Recollect's decay is cleanup.
 
-3. **Closed learning loop** — Hippo's outcome feedback teaches the system what's useful. Mneme has no feedback mechanism.
+3. **Closed learning loop** — Hippo's outcome feedback teaches the system what's useful. Recollect has no feedback mechanism.
 
-4. **Session awareness** — Hippo has working memory, session events, handoffs. Mneme has minimal session concepts.
+4. **Session awareness** — Hippo has working memory, session events, handoffs. Recollect has minimal session concepts.
 
-5. **Conflict awareness** — Hippo detects and flags contradictions. Mneme can represent contradictions but doesn't detect them.
+5. **Conflict awareness** — Hippo detects and flags contradictions. Recollect can represent contradictions but doesn't detect them.
 
-6. **Human-readable storage** — Hippo's markdown mirrors are git-trackable and human-readable. Mneme's data lives only in Postgres.
+6. **Human-readable storage** — Hippo's markdown mirrors are git-trackable and human-readable. Recollect's data lives only in Postgres.
 
 ## Complementary Strengths
 
 The two systems are complementary rather than competitive:
 
-- **Mneme** excels at structured knowledge management with graphs and document pipelines — ideal for applications that need to understand relationships between concepts.
+- **Recollect** excels at structured knowledge management with graphs and document pipelines — ideal for applications that need to understand relationships between concepts.
 
 - **Hippo** excels at adaptive memory with biological mechanisms — ideal for agents that need to learn what to remember and what to forget.
 
-The enhancements in this directory bring Hippo's biological mechanisms into Mneme's structured knowledge framework, implemented with Elixir's OTP strengths rather than database tables.
+The enhancements in this directory bring Hippo's biological mechanisms into Recollect's structured knowledge framework, implemented with Elixir's OTP strengths rather than database tables.

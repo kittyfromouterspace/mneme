@@ -1,15 +1,15 @@
-defmodule Mneme.Fixtures do
+defmodule Recollect.Fixtures do
   @moduledoc """
   Test fixtures for creating test data.
   """
 
-  alias Mneme.Config
-  alias Mneme.Schema.Chunk
-  alias Mneme.Schema.Collection
-  alias Mneme.Schema.Document
-  alias Mneme.Schema.Edge
-  alias Mneme.Schema.Entity
-  alias Mneme.Schema.Entry
+  alias Recollect.Config
+  alias Recollect.Schema.Chunk
+  alias Recollect.Schema.Collection
+  alias Recollect.Schema.Document
+  alias Recollect.Schema.Edge
+  alias Recollect.Schema.Entity
+  alias Recollect.Schema.Entry
 
   def owner_id, do: Ecto.UUID.generate()
   def scope_id, do: Ecto.UUID.generate()

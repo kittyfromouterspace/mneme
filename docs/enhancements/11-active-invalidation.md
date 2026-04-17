@@ -4,7 +4,7 @@
 
 ## Problem
 
-Mneme currently only handles memory decay through passive mechanisms — entries age out based on access patterns. But there's a more active scenario: when a **breaking change** happens (e.g., migrating from webpack to vite), the old knowledge becomes actively wrong, not just stale.
+Recollect currently only handles memory decay through passive mechanisms — entries age out based on access patterns. But there's a more active scenario: when a **breaking change** happens (e.g., migrating from webpack to vite), the old knowledge becomes actively wrong, not just stale.
 
 Hippo handles this with `hippo learn --git` which detects migrations and weakens related memories. Without this, users have:
 - Memories about "use webpack" that persist long after migrating to vite
@@ -42,7 +42,7 @@ Active invalidation — detect breaking changes and proactively weaken or replac
 ## Git-Based Detection
 
 ```elixir
-defmodule Mneme.Invalidation.GitDetector do
+defmodule Recollect.Invalidation.GitDetector do
   @moduledoc """
   Detect breaking changes from git history.
   
@@ -142,7 +142,7 @@ end
 ## Invalidation API
 
 ```elixir
-defmodule Mneme.Invalidation do
+defmodule Recollect.Invalidation do
   @moduledoc """
   Active memory invalidation based on detected or explicit breaking changes.
   """
@@ -173,17 +173,17 @@ end
 
 ```elixir
 # Auto-detect and invalidate from recent git history
-{:ok, result} = Mneme.Invalidation.run_from_git(scope_id: workspace_id)
+{:ok, result} = Recollect.Invalidation.run_from_git(scope_id: workspace_id)
 # => %{invalidations: 5, migrations_detected: 2}
 
 # Manual invalidation
-Mneme.Invalidation.invalidate("webpack", 
+Recollect.Invalidation.invalidate("webpack", 
   reason: "migrated to vite",
   scope_id: workspace_id
 )
 
 # Invalidate with replacement
-Mneme.Invalidation.invalidate("create-react-app",
+Recollect.Invalidation.invalidate("create-react-app",
   replacement: "vite",
   reason: "migration to vite",
   scope_id: workspace_id
@@ -195,7 +195,7 @@ Mneme.Invalidation.invalidate("create-react-app",
 The learning system (Enhancement 10) can trigger invalidation:
 
 ```elixir
-# In Mneme.Learning.run/1, after processing commits:
+# In Recollect.Learning.run/1, after processing commits:
 defp maybe_invalidate(entries, scope_id) do
   # Check for migration patterns in newly learned entries
   migrations = Enum.filter(entries, fn e ->
@@ -203,7 +203,7 @@ defp maybe_invalidate(entries, scope_id) do
   end)
   
   for migration <- migrations do
-    Mneme.Invalidation.invalidate_migration(scope_id, migration)
+    Recollect.Invalidation.invalidate_migration(scope_id, migration)
   end
 end
 ```
@@ -212,7 +212,7 @@ end
 
 ```elixir
 # Track invalidation history
-create table(:mneme_invalidations, primary_key: false) do
+create table(:recollect_invalidations, primary_key: false) do
   add :id, :binary_id, primary_key: true
   add :scope_id, :binary_id, null: false
   add :entry_id, :binary_id, null: false
@@ -226,7 +226,7 @@ end
 ## Configuration
 
 ```elixir
-config :mneme,
+config :recollect,
   invalidation: [
     enabled: true,
     auto_detect: true,

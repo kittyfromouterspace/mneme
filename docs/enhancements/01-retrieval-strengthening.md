@@ -4,7 +4,7 @@
 
 ## Problem
 
-Mneme currently tracks access count and last accessed time, but retrieving a memory has no effect on its longevity. In human memory (and in Hippo), recalled memories undergo "reconsolidation" — the act of retrieval destabilizes the trace, then re-encodes it stronger. This is the testing effect.
+Recollect currently tracks access count and last accessed time, but retrieving a memory has no effect on its longevity. In human memory (and in Hippo), recalled memories undergo "reconsolidation" — the act of retrieval destabilizes the trace, then re-encodes it stronger. This is the testing effect.
 
 ## Solution
 
@@ -17,7 +17,7 @@ Add retrieval strengthening mechanics to entries:
 ## Architecture
 
 ```
-Search → :ets.update_counter(:mneme_retrieval_counters, entry_id, {2, 1})
+Search → :ets.update_counter(:recollect_retrieval_counters, entry_id, {2, 1})
                                     ↓ (every 30s)
                      RetrievalCounter GenServer flush → bulk DB UPDATE
 ```
@@ -26,7 +26,7 @@ Instead of one async `UPDATE` per search result (current `bump_access` pattern),
 
 ## Schema Changes
 
-Add to `mneme_entries`:
+Add to `recollect_entries`:
 
 ```elixir
 add :half_life_days, :float, default: 7.0, null: false
@@ -38,7 +38,7 @@ Note: **No `retrieval_count` column.** The counter lives in ETS and is flushed t
 ## ETS Counter + GenServer Flush
 
 ```elixir
-defmodule Mneme.RetrievalCounter do
+defmodule Recollect.RetrievalCounter do
   @moduledoc """
   GenServer that owns an ETS :counter table for retrieval bumps.
 
@@ -48,7 +48,7 @@ defmodule Mneme.RetrievalCounter do
   """
   use GenServer
 
-  @table :mneme_retrieval_counters
+  @table :recollect_retrieval_counters
   @flush_interval_ms 30_000
 
   def start_link(opts \\ []) do
@@ -84,13 +84,13 @@ defmodule Mneme.RetrievalCounter do
 
     if entries != [] do
       now = DateTime.utc_now()
-      boost_days = Mneme.Config.get([:retrieval_strengthening, :half_life_boost_days], 2)
+      boost_days = Recollect.Config.get([:retrieval_strengthening, :half_life_boost_days], 2)
 
       # Single bulk UPDATE
       ids = Enum.map(entries, fn {id, _count} -> id end)
 
-      Mneme.Config.repo().query("""
-        UPDATE mneme_entries
+      Recollect.Config.repo().query("""
+        UPDATE recollect_entries
         SET access_count = access_count + 1,
             half_life_days = half_life_days + $1,
             last_accessed_at = $2
@@ -113,7 +113,7 @@ end
 Pure function, no state:
 
 ```elixir
-defmodule Mneme.Strength do
+defmodule Recollect.Strength do
   @doc """
   Calculate current strength of an entry at a point in time.
   strength = decay × retrieval_boost × emotional_multiplier × confidence
@@ -139,7 +139,7 @@ defmodule Mneme.Strength do
   end
 
   defp emotional_multiplier(%{emotional_valence: valence}) do
-    multipliers = :persistent_term.get({:mneme, :emotional_multipliers}, %{})
+    multipliers = :persistent_term.get({:recollect, :emotional_multipliers}, %{})
     Map.get(multipliers, valence, 1.0)
   end
 end
@@ -147,20 +147,20 @@ end
 
 ## Integration with Search
 
-Replace the current `bump_access` in `Mneme.Search.Vector`:
+Replace the current `bump_access` in `Recollect.Search.Vector`:
 
 ```elixir
 # Current (hits DB per search):
 defp bump_access(results, repo) do
-  Task.Supervisor.start_child(Mneme.TaskSupervisor, fn ->
-    repo.query("UPDATE mneme_entries SET access_count = access_count + 1, ...")
+  Task.Supervisor.start_child(Recollect.TaskSupervisor, fn ->
+    repo.query("UPDATE recollect_entries SET access_count = access_count + 1, ...")
   end)
 end
 
 # New (ETS counter, batched flush):
 defp bump_access(results, _repo) do
   for %{"id" => id} <- results do
-    Mneme.RetrievalCounter.bump(id)
+    Recollect.RetrievalCounter.bump(id)
   end
 end
 ```
@@ -168,7 +168,7 @@ end
 ## Configuration
 
 ```elixir
-config :mneme,
+config :recollect,
   retrieval_strengthening: [
     enabled: true,
     half_life_boost_days: 2,
@@ -178,16 +178,16 @@ config :mneme,
 
 ## Application Startup
 
-Add to `Mneme.Application`:
+Add to `Recollect.Application`:
 
 ```elixir
 def start(_type, _args) do
   children = [
-    {Task.Supervisor, name: Mneme.TaskSupervisor},
-    Mneme.RetrievalCounter  # NEW
+    {Task.Supervisor, name: Recollect.TaskSupervisor},
+    Recollect.RetrievalCounter  # NEW
   ]
 
-  opts = [strategy: :one_for_one, name: Mneme.Supervisor]
+  opts = [strategy: :one_for_one, name: Recollect.Supervisor]
   Supervisor.start_link(children, opts)
 end
 ```
@@ -195,16 +195,16 @@ end
 ## Migration
 
 ```elixir
-defmodule Mneme.Repo.Migrations.AddRetrievalStrengthening do
+defmodule Recollect.Repo.Migrations.AddRetrievalStrengthening do
   use Ecto.Migration
 
   def change do
-    alter table(:mneme_entries) do
+    alter table(:recollect_entries) do
       add :half_life_days, :float, default: 7.0, null: false
       add :pinned, :boolean, default: false, null: false
     end
 
-    create index(:mneme_entries, [:half_life_days])
+    create index(:recollect_entries, [:half_life_days])
   end
 end
 ```
@@ -215,7 +215,7 @@ end
 - `pinned` defaults to false
 - Existing entries work without modification
 - Retrieval strengthening is opt-in via config (but enabled by default)
-- If `Mneme.RetrievalCounter` is not started, `bump/1` is a no-op (graceful degradation)
+- If `Recollect.RetrievalCounter` is not started, `bump/1` is a no-op (graceful degradation)
 
 ## Testing
 

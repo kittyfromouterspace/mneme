@@ -6,7 +6,7 @@
 
 When retrieving context for an LLM, more isn't always better. A user asking "what was that error about?" needs different detail than "give me a summary of this project."
 
-Currently, Mneme returns a fixed number of entries with equal weight. There's no way to:
+Currently, Recollect returns a fixed number of entries with equal weight. There's no way to:
 - Get high-level summaries for broad questions
 - Get detailed context for specific questions
 - Control granularity based on query intent
@@ -43,7 +43,7 @@ Context Mipmaps — progressive detail levels like image mipmaps. Store entries 
 ## Detail Levels
 
 ```elixir
-defmodule Mneme.Mipmap do
+defmodule Recollect.Mipmap do
   @moduledoc """
   Context mipmaps — progressive detail levels for retrieval.
   """
@@ -108,7 +108,7 @@ end
 
 ```elixir
 # Mipmap entries table (separate from main entries)
-create table(:mneme_mipmaps, primary_key: false) do
+create table(:recollect_mipmaps, primary_key: false) do
   add :entry_id, :binary_id, primary_key: true
   add :level, :string, primary_key: true  # :anchor, :abstract, :summary, :full
   add :content, :text
@@ -116,14 +116,14 @@ create table(:mneme_mipmaps, primary_key: false) do
   add :embedding, :vector(1536)  # Embed each level separately
 end
 
-create index(:mneme_mipmaps, [:entry_id])
-create index(:mneme_mipmaps, [:level])
+create index(:recollect_mipmaps, [:entry_id])
+create index(:recollect_mipmaps, [:level])
 ```
 
 ## Retrieval Strategy
 
 ```elixir
-defmodule Mneme.Search.MipmapRetriever do
+defmodule Recollect.Search.MipmapRetriever do
   @moduledoc """
   Retrieve at appropriate detail level based on query characteristics.
   """
@@ -181,10 +181,10 @@ end
 ## Integration with Main Search
 
 ```elixir
-defmodule Mneme.Search do
+defmodule Recollect.Search do
   def search(query, opts \\ []) do
     # Check if mipmap search is enabled
-    if Application.get_env(:mneme, :mipmap_enabled, false) do
+    if Application.get_env(:recollect, :mipmap_enabled, false) do
       MipmapRetriever.search(query, scope_id, opts)
     else
       Vector.search(query, opts)
@@ -197,19 +197,19 @@ end
 
 ```elixir
 # Short query → gets abstract-level matches
-{:ok, results} = Mneme.search("auth")
+{:ok, results} = Recollect.search("auth")
 
 # Long query → gets full detail
-{:ok, results} = Mneme.search("How do I implement token-based authentication in Elixir?")
+{:ok, results} = Recollect.search("How do I implement token-based authentication in Elixir?")
 
 # Explicit level request
-{:ok, results} = Mneme.search("auth", level: :summary)
+{:ok, results} = Recollect.search("auth", level: :summary)
 ```
 
 ## Configuration
 
 ```elixir
-config :mneme,
+config :recollect,
   mipmap: [
     enabled: true,
     levels: [:anchor, :abstract, :summary, :full],
@@ -221,11 +221,11 @@ config :mneme,
 ## Migration
 
 ```elixir
-defmodule Mneme.Repo.Migrations.AddMipmaps do
+defmodule Recollect.Repo.Migrations.AddMipmaps do
   use Ecto.Migration
 
   def change do
-    create table(:mneme_mipmaps, primary_key: false) do
+    create table(:recollect_mipmaps, primary_key: false) do
       add :entry_id, :binary_id, primary_key: true
       add :level, :string, primary_key: true
       add :content, :text
@@ -233,7 +233,7 @@ defmodule Mneme.Repo.Migrations.AddMipmaps do
       add :embedding, :vector(1536)
     end
 
-    create index(:mneme_mipmaps, [:level])
+    create index(:recollect_mipmaps, [:level])
   end
 end
 ```

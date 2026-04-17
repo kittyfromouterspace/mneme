@@ -4,7 +4,7 @@
 
 ## Problem
 
-Mneme has no concept of ephemeral session state. All entries in `mneme_entries` are long-term knowledge. When an agent is mid-task and needs to track "what am I working on right now?", it has nowhere to put that information except the long-term store — where it persists indefinitely and clutters search results.
+Recollect has no concept of ephemeral session state. All entries in `recollect_entries` are long-term knowledge. When an agent is mid-task and needs to track "what am I working on right now?", it has nowhere to put that information except the long-term store — where it persists indefinitely and clutters search results.
 
 Hippo solves this with a separate bounded buffer (`working_memory` SQLite table, max 20 entries per scope). In Elixir, this is a textbook GenServer use case — **no database table needed**.
 
@@ -15,7 +15,7 @@ Add a working memory tier (Tier 0) — a `DynamicSupervisor` managing one `GenSe
 ## Architecture
 
 ```
-Mneme.WorkingMemory.Supervisor (DynamicSupervisor)
+Recollect.WorkingMemory.Supervisor (DynamicSupervisor)
 ├── WorkingMemory.Server (scope_id: "abc-123")  ← [{0.9, content, ...}, {0.7, ...}, ...]
 ├── WorkingMemory.Server (scope_id: "def-456")  ← [{0.5, content, ...}]
 └── ... (auto-started on first push, auto-killed on flush)
@@ -29,8 +29,8 @@ Mneme.WorkingMemory.Supervisor (DynamicSupervisor)
 ## API
 
 ```elixir
-defmodule Mneme.WorkingMemory do
-  @supervisor Mneme.WorkingMemory.Supervisor
+defmodule Recollect.WorkingMemory do
+  @supervisor Recollect.WorkingMemory.Supervisor
 
   @doc """
   Push a new entry into working memory for a scope.
@@ -77,7 +77,7 @@ defmodule Mneme.WorkingMemory do
   end
 
   defp start_scope(scope_id) do
-    child_spec = {Mneme.WorkingMemory.Server, scope_id: scope_id}
+    child_spec = {Recollect.WorkingMemory.Server, scope_id: scope_id}
 
     case DynamicSupervisor.start_child(@supervisor, child_spec) do
       {:ok, pid} -> pid
@@ -86,7 +86,7 @@ defmodule Mneme.WorkingMemory do
   end
 
   defp whereis_scope(scope_id) do
-    Registry.lookup(Mneme.WorkingMemory.Registry, scope_id)
+    Registry.lookup(Recollect.WorkingMemory.Registry, scope_id)
     |> case do
       [{pid, _}] -> pid
       [] -> nil
@@ -98,7 +98,7 @@ end
 ## GenServer Implementation
 
 ```elixir
-defmodule Mneme.WorkingMemory.Server do
+defmodule Recollect.WorkingMemory.Server do
   @moduledoc """
   GenServer holding a bounded working memory buffer for a single scope.
 
@@ -155,7 +155,7 @@ defmodule Mneme.WorkingMemory.Server do
   end
 
   defp via_tuple(scope_id) do
-    {:via, Registry, {Mneme.WorkingMemory.Registry, scope_id}}
+    {:via, Registry, {Recollect.WorkingMemory.Registry, scope_id}}
   end
 
   defp generate_id do
@@ -169,12 +169,12 @@ end
 Use a `Registry` for scope_id → pid mapping:
 
 ```elixir
-# In Mneme.Application:
+# In Recollect.Application:
 children = [
-  {Task.Supervisor, name: Mneme.TaskSupervisor},
-  {Registry, keys: :unique, name: Mneme.WorkingMemory.Registry},
-  {DynamicSupervisor, strategy: :one_for_one, name: Mneme.WorkingMemory.Supervisor},
-  Mneme.RetrievalCounter
+  {Task.Supervisor, name: Recollect.TaskSupervisor},
+  {Registry, keys: :unique, name: Recollect.WorkingMemory.Registry},
+  {DynamicSupervisor, strategy: :one_for_one, name: Recollect.WorkingMemory.Supervisor},
+  Recollect.RetrievalCounter
 ]
 ```
 
@@ -184,14 +184,14 @@ Working memory entries are included **before** long-term memories in context out
 
 ```elixir
 def build_context_with_working_memory(search_results, scope_id) do
-  working = case Mneme.WorkingMemory.read(scope_id) do
+  working = case Recollect.WorkingMemory.read(scope_id) do
     {:ok, entries} -> entries
     _ -> []
   end
 
   [
     format_working_memory(working),
-    Mneme.build_context(search_results)
+    Recollect.build_context(search_results)
   ]
   |> Enum.filter(&(&1 != ""))
   |> Enum.join("\n\n")
@@ -201,7 +201,7 @@ end
 ## Configuration
 
 ```elixir
-config :mneme,
+config :recollect,
   working_memory: [
     enabled: true,
     max_entries_per_scope: 20
@@ -219,7 +219,7 @@ config :mneme,
 | Concurrency | Row locks | Message queue (serialized per scope) |
 | Complexity | Migration + schema + queries | ~80 lines of GenServer |
 
-If crash recovery is desired (e.g., host app wants working memory to survive application restarts), add an optional `:persistent` config that snapshots to a single `mneme_working_memory_snapshots` table on flush. This is opt-in and adds minimal complexity.
+If crash recovery is desired (e.g., host app wants working memory to survive application restarts), add an optional `:persistent` config that snapshots to a single `recollect_working_memory_snapshots` table on flush. This is opt-in and adds minimal complexity.
 
 ## Testing
 

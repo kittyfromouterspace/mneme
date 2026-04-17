@@ -1,4 +1,4 @@
-# Mneme Implementation Plan
+# Recollect Implementation Plan
 
 > Consolidated from research on Hippo, Cognee, and HN discussions.
 > Focuses on Elixir-idiomatic patterns.
@@ -47,7 +47,7 @@ field(:context_hints, :map, default: %{})
 
 Migration:
 ```elixir
-alter table(:mneme_entries) do
+alter table(:recollect_entries) do
   add :context_hints, :map, default: %{}
 end
 ```
@@ -60,7 +60,7 @@ Create pure functions for detecting environment context:
 
 ```elixir
 # lib/mneme/context/detector.ex
-defmodule Mneme.Context.Detector do
+defmodule Recollect.Context.Detector do
   @detectors [:git, :path, :os]
   
   def detect do
@@ -75,7 +75,7 @@ end
 
 ### Step 1.3: Auto-Capture on remember() ✅
 
-Modify `Mneme.Knowledge.remember/2` to capture context:
+Modify `Recollect.Knowledge.remember/2` to capture context:
 
 ```elixir
 # lib/mneme/knowledge.ex - in remember/2
@@ -83,7 +83,7 @@ context_hints =
   if opts[:context_hints] do
     opts[:context_hints]
   else
-    Mneme.Context.Detector.detect()
+    Recollect.Context.Detector.detect()
   end
 ```
 
@@ -95,7 +95,7 @@ Add boost calculation in search:
 
 ```elixir
 # lib/mneme/context/booster.ex
-defmodule Mneme.Search.ContextBooster do
+defmodule Recollect.Search.ContextBooster do
   def boost(entry_hints, current_context) do
     matches = Map.size(Map.take(entry_hints, Map.keys(current_context)))
     min(0.5, 0.15 * matches)
@@ -117,7 +117,7 @@ Define the behaviour:
 
 ```elixir
 # lib/mneme/learning/behaviour.ex
-defmodule Mneme.Learner do
+defmodule Recollect.Learner do
   @callback source() :: atom()
   @callback fetch_since(Date.t(), binary()) :: {:ok, [map()]} | {:error, term()}
   @callback extract(map()) :: {:ok, map()} | {:skip, binary()} | {:error, term()}
@@ -131,8 +131,8 @@ end
 
 ```elixir
 # lib/mneme/learning/git.ex
-defmodule Mneme.Learner.Git do
-  @behaviour Mneme.Learner
+defmodule Recollect.Learner.Git do
+  @behaviour Recollect.Learner
   ...
 end
 ```
@@ -143,8 +143,8 @@ end
 
 ```elixir
 # lib/mneme/learning/pipeline.ex
-defmodule Mneme.Learning.Pipeline do
-  alias Mneme.{Config, Knowledge}
+defmodule Recollect.Learning.Pipeline do
+  alias Recollect.{Config, Knowledge}
   
   def run(scope_id, opts \\ []) do
     # Fetch → Extract → Persist
@@ -157,14 +157,14 @@ end
 ### Step 2.4: Learning Configuration ✅
 
 ```elixir
-config :mneme,
+config :recollect,
   learning: [
     enabled: true,
     sources: [:git]
   ]
 ```
 
-✅ **Done**: Added `Mneme.learn/1` API to main module
+✅ **Done**: Added `Recollect.learn/1` API to main module
 
 ---
 
@@ -176,7 +176,7 @@ config :mneme,
 
 ```elixir
 # lib/mneme/invalidation.ex
-defmodule Mneme.Invalidation do
+defmodule Recollect.Invalidation do
   @migration_patterns [
     ~r/migrate[ds]?\s+(?:from\s+)?(\w+)\s+(?:to|with)\s+(\w+)/i,
     ...
@@ -203,7 +203,7 @@ end
 
 ### Step 3.3: Integrate with Learning ✅
 
-✅ **Done**: Added `Mneme.invalidate/1` API to main module
+✅ **Done**: Added `Recollect.invalidate/1` API to main module
 
 ---
 
@@ -215,7 +215,7 @@ end
 
 ```elixir
 # priv/repo/migrations/..._add_handoffs_table.exs
-create table(:mneme_handoffs, primary_key: false) do
+create table(:recollect_handoffs, primary_key: false) do
   add :id, :binary_id, primary_key: true
   add :scope_id, :binary_id
   add :session_id, :binary_id
@@ -233,7 +233,7 @@ end
 
 ```elixir
 # lib/mneme/handoff.ex
-defmodule Mneme.Handoff do
+defmodule Recollect.Handoff do
   def create(scope_id, opts \\ [])
   def get(scope_id)
   def recent(scope_id, since \\ ...)
@@ -247,7 +247,7 @@ end
 ```elixir
 # lib/mneme/working_memory.ex
 def on_session_resume(scope_id) do
-  case Mneme.Handoff.get(scope_id) do
+  case Recollect.Handoff.get(scope_id) do
     {:ok, handoff} ->
       push(scope_id, "📋 #{handoff.what}", importance: 0.95)
       Enum.each(handoff.next, &push(scope_id, "→ #{&1}", importance: 0.8))
@@ -258,7 +258,7 @@ end
 
 ✅ **Done**: Added `load_handoff/2` to `lib/mneme/working_memory.ex`
 
-✅ **Done**: Added `Mneme.handoff/2` and `Mneme.get_handoff/1` to main API
+✅ **Done**: Added `Recollect.handoff/2` and `Recollect.get_handoff/1` to main API
 
 ---
 
@@ -270,7 +270,7 @@ end
 
 ```elixir
 # priv/repo/migrations/..._add_mipmaps_table.exs
-create table(:mneme_mipmaps, primary_key: false) do
+create table(:recollect_mipmaps, primary_key: false) do
   add :entry_id, :binary_id, primary_key: true
   add :level, :string, primary_key: true  # :anchor, :abstract, :summary, :full
   add :content, :text
@@ -285,7 +285,7 @@ end
 
 ```elixir
 # lib/mneme/mipmap/generator.ex
-defmodule Mneme.Mipmap do
+defmodule Recollect.Mipmap do
   def generate_for(entry) do
     # :full, :summary, :abstract, :anchor
   end
@@ -296,7 +296,7 @@ end
 
 ### Step 5.3: Pluggable Retriever ✅
 
-✅ **Done**: Added `retrieve/3` to `Mneme.Mipmap` module
+✅ **Done**: Added `retrieve/3` to `Recollect.Mipmap` module
 
 ---
 
@@ -316,19 +316,19 @@ All 5 phases implemented:
 
 ```elixir
 # Context-aware retrieval (automatic)
-{:ok, results} = Mneme.search("terminal performance")
+{:ok, results} = Recollect.search("terminal performance")
 # Results are boosted if they match current git repo/path/OS
 
 # Learning from git
-{:ok, result} = Mneme.learn(scope_id: workspace_id)
+{:ok, result} = Recollect.learn(scope_id: workspace_id)
 
 # Active invalidation
-{:ok, result} = Mneme.invalidate(scope_id: workspace_id)
+{:ok, result} = Recollect.invalidate(scope_id: workspace_id)
 
 # Session handoffs
-Mneme.handoff(workspace_id, what: "Implementing auth", next: ["Add controller"])
-{:ok, handoff} = Mneme.get_handoff(workspace_id)
-Mneme.WorkingMemory.load_handoff(workspace_id)
+Recollect.handoff(workspace_id, what: "Implementing auth", next: ["Add controller"])
+{:ok, handoff} = Recollect.get_handoff(workspace_id)
+Recollect.WorkingMemory.load_handoff(workspace_id)
 ```
 
 ### New Migrations Required
@@ -356,7 +356,7 @@ mix ecto.migrate
 lib/mneme/
   ├── application.ex              # (existing)
   ├── knowledge.ex                # (existing, modified)
-  ├── mneme.ex                    # (existing)
+  ├── recollect.ex                    # (existing)
   │
   ├── context/
   │   ├── detector.ex            # NEW
@@ -401,7 +401,7 @@ Each phase includes:
 ## Configuration After Implementation
 
 ```elixir
-config :mneme,
+config :recollect,
   # Context detection
   context: [
     enabled: true,

@@ -2,7 +2,7 @@
 
 ## What Was Accomplished
 
-This implementation makes Mneme database-agnostic, supporting both PostgreSQL (with pgvector) and libSQL/SQLite (with native vector support).
+This implementation makes Recollect database-agnostic, supporting both PostgreSQL (with pgvector) and libSQL/SQLite (with native vector support).
 
 ## New Files Created
 
@@ -38,17 +38,17 @@ Provides adapter-aware SQL generation for:
 
 ### 4. Updated Mix Task
 
-- **`lib/mix/tasks/mneme.gen.migration.ex`** - Now supports `--adapter` option
+- **`lib/mix/tasks/recollect.gen.migration.ex`** - Now supports `--adapter` option
 
 Usage:
 ```bash
-mix mneme.gen.migration --adapter libsql --dimensions 768
-mix mneme.gen.migration --adapter postgres --dimensions 1536
+mix recollect.gen.migration --adapter libsql --dimensions 768
+mix recollect.gen.migration --adapter postgres --dimensions 1536
 ```
 
 ## Modified Files
 
-### Mneme Core
+### Recollect Core
 
 1. **`lib/mneme/config.ex`**
    - Added `adapter/0` function to return configured adapter
@@ -83,9 +83,9 @@ mix mneme.gen.migration --adapter postgres --dimensions 1536
 
 ### Schemas
 
-7. **`lib/mneme/schema/entry.ex`** - Changed `embedding` field from `Pgvector.Ecto.Vector` to `Mneme.EmbeddingType`
-8. **`lib/mneme/schema/chunk.ex`** - Changed `embedding` field from `Pgvector.Ecto.Vector` to `Mneme.EmbeddingType`
-9. **`lib/mneme/schema/entity.ex`** - Changed `embedding` field from `Pgvector.Ecto.Vector` to `Mneme.EmbeddingType`
+7. **`lib/mneme/schema/entry.ex`** - Changed `embedding` field from `Pgvector.Ecto.Vector` to `Recollect.EmbeddingType`
+8. **`lib/mneme/schema/chunk.ex`** - Changed `embedding` field from `Pgvector.Ecto.Vector` to `Recollect.EmbeddingType`
+9. **`lib/mneme/schema/entity.ex`** - Changed `embedding` field from `Pgvector.Ecto.Vector` to `Recollect.EmbeddingType`
 
 ## How to Configure
 
@@ -95,18 +95,18 @@ mix mneme.gen.migration --adapter postgres --dimensions 1536
 # mix.exs
 dep do
   [
-    {:mneme, "~> 0.2.0"},
+    {:recollect, "~> 0.2.0"},
     {:ecto_libsql, "~> 0.9"}
     # postgrex and pgvector are not needed
   ]
 end
 
 # config/config.exs
-config :mneme,
-  database_adapter: Mneme.DatabaseAdapter.LibSQL,
+config :recollect,
+  database_adapter: Recollect.DatabaseAdapter.LibSQL,
   repo: MyApp.Repo,
   embedding: [
-    provider: Mneme.Embedding.OpenRouter,
+    provider: Recollect.Embedding.OpenRouter,
     dimensions: 768
   ]
 
@@ -122,18 +122,18 @@ config :my_app, MyApp.Repo,
 # mix.exs
 dep do
   [
-    {:mneme, "~> 0.2.0"},
+    {:recollect, "~> 0.2.0"},
     {:postgrex, "~> 0.19"},
     {:pgvector, "~> 0.3"}
   ]
 end
 
 # config/config.exs
-config :mneme,
-  database_adapter: Mneme.DatabaseAdapter.Postgres,
+config :recollect,
+  database_adapter: Recollect.DatabaseAdapter.Postgres,
   repo: MyApp.Repo,
   embedding: [
-    provider: Mneme.Embedding.OpenRouter,
+    provider: Recollect.Embedding.OpenRouter,
     dimensions: 1536
   ]
 ```

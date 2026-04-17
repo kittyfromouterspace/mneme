@@ -1,4 +1,4 @@
-# Mneme Improvements — MemPalace Research
+# Recollect Improvements — MemPalace Research
 
 This document explores potential improvements inspired by MemPalace (https://github.com/milla-jovovich/mempalace), analyzing complexity vs. potential gains.
 
@@ -18,7 +18,7 @@ This document explores potential improvements inspired by MemPalace (https://git
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Create `Mneme.Classification` module | ✅ Done | `lib/mneme/classification.ex` |
+| Create `Recollect.Classification` module | ✅ Done | `lib/mneme/classification.ex` |
 | Add regex patterns for 5 categories | ✅ Done | decision, preference, milestone, problem, emotional |
 | Integrate into `Knowledge.remember/2` | ✅ Done | Added `:auto_classify` option |
 | Add tests | ❌ Not done | — |
@@ -29,7 +29,7 @@ This document explores potential improvements inspired by MemPalace (https://git
 |------|--------|-------|
 | Add claim extraction to Classification | ✅ Done | `extract_claims/1` function |
 | Create `Knowledge.check_contradiction/3` | ✅ Done | Detects attribution & status conflicts |
-| Add telemetry | ✅ Done | `[:mneme, :contradiction_check, :stop]` |
+| Add telemetry | ✅ Done | `[:recollect, :contradiction_check, :stop]` |
 | Add conflict resolution UI | ❌ Not done | Future enhancement |
 
 ### Phase 3: Enhanced Filtering
@@ -56,12 +56,12 @@ MemPalace's `general_extractor.py` uses regex-based pattern matching to classify
 - **PROBLEMS** — "bug", "error", "doesn't work", "root cause"
 - **EMOTIONAL** — "love", "scared", "proud", "grateful"
 
-### How would it work in Mneme?
+### How would it work in Recollect?
 
-Add a new module `Mneme.Classification` that runs before/after embedding:
+Add a new module `Recollect.Classification` that runs before/after embedding:
 
 ```elixir
-defmodule Mneme.Classification do
+defmodule Recollect.Classification do
   @memory_types ~w[decision preference milestone problem emotional note]a
   
   def classify(text) do
@@ -117,18 +117,18 @@ MemPalace has `fact_checker.py` that checks new facts against the knowledge grap
 - "Soren finished the auth migration" → conflicts with "Maya was assigned to auth migration"
 - "Kai has been here 2 years" → conflicts with records showing 3 years
 
-### Current State in Mneme
+### Current State in Recollect
 
-Mneme already has `ConflictDetection` (`lib/mneme/conflict_detection.ex`), but it:
+Recollect already has `ConflictDetection` (`lib/mneme/conflict_detection.ex`), but it:
 - Compares entries **pairwise** (O(n²))
 - Doesn't check against the **knowledge graph** entities/relations
 
 ### How would it work?
 
-Add `Mneme.Knowledge.contradiction_check/2`:
+Add `Recollect.Knowledge.contradiction_check/2`:
 
 ```elixir
-defmodule Mneme.Knowledge do
+defmodule Recollect.Knowledge do
   @doc """
   Check if a new fact contradicts existing knowledge graph.
   Returns {:conflict, details} or :ok.
@@ -171,7 +171,7 @@ This is the core value prop of systems like Mem0 and Zep. MemPalace's 96.6% benc
 - Performance: don't check every entry, only new ones
 - False positives: "formerly worked at X" vs "works at X"
 
-### Recommendation: **DO SECOND** — Medium complexity, high potential gains, differentiates Mneme.
+### Recommendation: **DO SECOND** — Medium complexity, high potential gains, differentiates Recollect.
 
 ---
 
@@ -186,9 +186,9 @@ Search within wing: 73.1% (+12%)
 Search wing + room: 94.8% (+34%)
 ```
 
-### Current State in Mneme
+### Current State in Recollect
 
-Mneme already supports:
+Recollect already supports:
 - `scope_id` — workspace/project
 - `owner_id` — user
 - `entry_type` — note, decision, event, etc.
@@ -249,16 +249,16 @@ MemPalace uses "halls" as memory categories:
 - `hall_preferences` — habits, likes, opinions
 - `hall_advice` — recommendations and solutions
 
-### Current State in Mneme
+### Current State in Recollect
 
-Mneme's `entry_types`:
+Recollect's `entry_types`:
 ```elixir
 ~w(outcome event decision observation hypothesis note session_summary conversation_turn archived)
 ```
 
 ### Alignment Analysis
 
-| MemPalace Hall | Mneme Entry Type | Alignment |
+| MemPalace Hall | Recollect Entry Type | Alignment |
 |----------------|------------------|-----------|
 | hall_facts | decision, outcome | ✅ Close |
 | hall_events | event, session_summary | ✅ Close |
@@ -266,7 +266,7 @@ Mneme's `entry_types`:
 | hall_preferences | note (with preference tag) | ⚠️ Needs tag |
 | hall_advice | note (with advice tag) | ⚠️ Needs tag |
 
-### Recommendation: **SKIP** — Mneme's taxonomy is already close. Add tags via classification feature instead.
+### Recommendation: **SKIP** — Recollect's taxonomy is already close. Add tags via classification feature instead.
 
 ---
 
@@ -274,7 +274,7 @@ Mneme's `entry_types`:
 
 ### Phase 1: Classification (Week 1)
 
-1. Create `Mneme.Classification` module
+1. Create `Recollect.Classification` module
 2. Add regex patterns for 5 categories
 3. Integrate into `Knowledge.remember/2`
 4. Add tests
@@ -302,7 +302,7 @@ Mneme's `entry_types`:
 - `searcher.py` — ChromaDB search (152 lines)
 - `layers.py` — 4-layer memory stack (515 lines)
 
-### Mneme (current)
+### Recollect (current)
 - `lib/mneme/knowledge.ex` — Tier 2 API (144 lines)
 - `lib/mneme/conflict_detection.ex` — Pairwise conflict (192 lines)
 - `lib/mneme/schema/entry.ex` — Entry schema (78 lines)
@@ -318,6 +318,6 @@ The most valuable additions are:
 1. **LLM-free classification** — Immediate value, low complexity
 2. **KG-aware contradiction detection** — High value, medium complexity
 
-These align with Mneme's existing architecture and extend capabilities without requiring significant rewrites.
+These align with Recollect's existing architecture and extend capabilities without requiring significant rewrites.
 
 The enhanced filtering is a "nice to have" that can be addressed once the core features are stable.

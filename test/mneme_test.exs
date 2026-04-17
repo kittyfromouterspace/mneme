@@ -1,5 +1,5 @@
-defmodule MnemeTest do
+defmodule RecollectTest do
   use ExUnit.Case, async: true
 
-  doctest Mneme
+  doctest Recollect
 end

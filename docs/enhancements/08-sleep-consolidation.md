@@ -4,16 +4,16 @@
 
 ## Problem
 
-Mneme has no mechanism for compressing repeated episodic knowledge into stable semantic patterns. Entries accumulate individually without ever being synthesized. In human memory (and in Hippo), sleep consolidation replays compressed versions of recent episodes and "teaches" the neocortex by repeatedly activating the same patterns.
+Recollect has no mechanism for compressing repeated episodic knowledge into stable semantic patterns. Entries accumulate individually without ever being synthesized. In human memory (and in Hippo), sleep consolidation replays compressed versions of recent episodes and "teaches" the neocortex by repeatedly activating the same patterns.
 
 ## Solution
 
-Add a `Mneme.Consolidation` module that runs a multi-pass consolidation cycle using `Task.async_stream` for CPU-bound operations. No new process needed — uses the existing `Mneme.TaskSupervisor`.
+Add a `Recollect.Consolidation` module that runs a multi-pass consolidation cycle using `Task.async_stream` for CPU-bound operations. No new process needed — uses the existing `Recollect.TaskSupervisor`.
 
 ## API
 
 ```elixir
-defmodule Mneme.Consolidation do
+defmodule Recollect.Consolidation do
   @doc """
   Run a full consolidation pass for a scope.
   Returns consolidation results.
@@ -31,7 +31,7 @@ end
 
 ```elixir
 # Full consolidation
-{:ok, result} = Mneme.Consolidation.run(scope_id: workspace_id)
+{:ok, result} = Recollect.Consolidation.run(scope_id: workspace_id)
 # %{
 #   decayed: 23,
 #   removed: 4,
@@ -42,7 +42,7 @@ end
 # }
 
 # Preview
-{:ok, preview} = Mneme.Consolidation.dry_run(scope_id: workspace_id)
+{:ok, preview} = Recollect.Consolidation.dry_run(scope_id: workspace_id)
 ```
 
 ## Consolidation Passes
@@ -57,7 +57,7 @@ defp decay_pass(entries, opts) do
   now = DateTime.utc_now()
 
   {survivors, removed} = Enum.split_with(entries, fn entry ->
-    entry.pinned or Mneme.Strength.calculate(entry, now) >= threshold
+    entry.pinned or Recollect.Strength.calculate(entry, now) >= threshold
   end)
 
   %{survivors: survivors, removed: removed, count: length(removed)}
@@ -187,11 +187,11 @@ end
 
 ### Pass 3: Conflict Detection
 
-Delegate to `Mneme.ConflictDetection` (see Enhancement 07):
+Delegate to `Recollect.ConflictDetection` (see Enhancement 07):
 
 ```elixir
 defp conflict_pass(scope_id) do
-  Mneme.ConflictDetection.detect(scope_id)
+  Recollect.ConflictDetection.detect(scope_id)
 end
 ```
 
@@ -201,7 +201,7 @@ Rebuild the ETS schema index (see Enhancement 06):
 
 ```elixir
 defp schema_indexing_pass do
-  Mneme.SchemaIndex.rebuild(Mneme.Config.repo())
+  Recollect.SchemaIndex.rebuild(Recollect.Config.repo())
 end
 ```
 
@@ -209,10 +209,10 @@ end
 
 ```elixir
 defp persist_consolidation_run(scope_id, results, duration_ms) do
-  repo = Mneme.Config.repo()
+  repo = Recollect.Config.repo()
 
   repo.query("""
-    INSERT INTO mneme_consolidation_runs
+    INSERT INTO recollect_consolidation_runs
       (id, scope_id, timestamp, decayed, removed, merged, semantic_created, conflicts_detected, duration_ms)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
   """, [
@@ -287,7 +287,7 @@ end
 ### Option 1: Mix Task
 
 ```elixir
-defmodule Mix.Tasks.Mneme.Consolidate do
+defmodule Mix.Tasks.Recollect.Consolidate do
   use Mix.Task
 
   def run(args) do
@@ -296,10 +296,10 @@ defmodule Mix.Tasks.Mneme.Consolidate do
     scope_id = opts[:scope_id] || raise "scope_id is required"
 
     if opts[:dry_run] do
-      {:ok, preview} = Mneme.Consolidation.dry_run(scope_id: scope_id)
+      {:ok, preview} = Recollect.Consolidation.dry_run(scope_id: scope_id)
       IO.inspect(preview)
     else
-      {:ok, result} = Mneme.Consolidation.run(scope_id: scope_id)
+      {:ok, result} = Recollect.Consolidation.run(scope_id: scope_id)
       IO.puts("Decayed: #{result.decayed}")
       IO.puts("Removed: #{result.removed}")
       IO.puts("Merged: #{result.merged}")
@@ -319,7 +319,7 @@ Let the host app decide when to consolidate — no built-in scheduler needed:
 # In host app's application.ex (using Quantum)
 children = [
   # ...
-  {Quantum, cron: "0 6 * * *", job: {Mneme.Consolidation, :run, [[scope_id: workspace_id]]}}
+  {Quantum, cron: "0 6 * * *", job: {Recollect.Consolidation, :run, [[scope_id: workspace_id]]}}
 ]
 ```
 
@@ -329,7 +329,7 @@ children = [
 # After session end with many entries
 def on_session_end(session) do
   if session.entry_count > 10 do
-    Mneme.Consolidation.run(scope_id: session.scope_id)
+    Recollect.Consolidation.run(scope_id: session.scope_id)
   end
 end
 ```
@@ -348,7 +348,7 @@ defp create_semantic_summary_llm(cluster) do
   Return a single paragraph that captures the common pattern.
   """
 
-  {provider, provider_opts} = {Mneme.Config.extraction_provider(), Mneme.Config.extraction_opts()}
+  {provider, provider_opts} = {Recollect.Config.extraction_provider(), Recollect.Config.extraction_opts()}
 
   case provider.extract(prompt, provider_opts) do
     {:ok, summary} -> summary
@@ -364,7 +364,7 @@ Emit telemetry events for consolidation runs:
 ```elixir
 def run(opts \\ []) do
   # ...
-  Mneme.Telemetry.event([:mneme, :consolidation, :stop], %{
+  Recollect.Telemetry.event([:recollect, :consolidation, :stop], %{
     duration: duration_ms,
     decayed: result.decayed,
     removed: result.removed,
@@ -378,7 +378,7 @@ end
 ## Configuration
 
 ```elixir
-config :mneme,
+config :recollect,
   sleep_consolidation: [
     enabled: true,
     decay_threshold: 0.05,
@@ -390,11 +390,11 @@ config :mneme,
 ## Migration
 
 ```elixir
-defmodule Mneme.Repo.Migrations.AddConsolidationRuns do
+defmodule Recollect.Repo.Migrations.AddConsolidationRuns do
   use Ecto.Migration
 
   def change do
-    create table(:mneme_consolidation_runs, primary_key: false) do
+    create table(:recollect_consolidation_runs, primary_key: false) do
       add :id, :binary_id, primary_key: true
       add :scope_id, :binary_id, null: false
       add :timestamp, :utc_datetime_usec, null: false
@@ -406,7 +406,7 @@ defmodule Mneme.Repo.Migrations.AddConsolidationRuns do
       add :duration_ms, :integer
     end
 
-    create index(:mneme_consolidation_runs, [:scope_id, :timestamp])
+    create index(:recollect_consolidation_runs, [:scope_id, :timestamp])
   end
 end
 ```
@@ -421,7 +421,7 @@ end
 - Integration test: full consolidation pipeline
 - Integration test: dry run reports changes without persisting
 - Property test: consolidation is idempotent (running twice yields same result)
-- Telemetry test: consolidation emits [:mneme, :consolidation, :stop] event
+- Telemetry test: consolidation emits [:recollect, :consolidation, :stop] event
 
 ## References
 

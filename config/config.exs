@@ -2,20 +2,20 @@ import Config
 
 config :logger, level: :warning
 
-config :mneme, Mneme.TestRepo,
-  database: "mneme_test",
+config :recollect, Recollect.TestRepo,
+  database: "recollect_test",
   username: "postgres",
   password: "postgres",
   hostname: "localhost",
   pool_size: 10,
   pool: Ecto.Adapters.SQL.Sandbox,
-  migration_repo: Mneme.TestRepo,
+  migration_repo: Recollect.TestRepo,
   priv: "priv/repo",
-  types: Mneme.PostgrexTypes
+  types: Recollect.PostgrexTypes
 
-config :mneme, ecto_repos: [Mneme.TestRepo]
+config :recollect, ecto_repos: [Recollect.TestRepo]
 
-config :mneme,
-  repo: Mneme.TestRepo,
-  embedding: [provider: Mneme.Embedding.Mock, mock: true],
-  table_prefix: "mneme_test_"
+config :recollect,
+  repo: Recollect.TestRepo,
+  embedding: [provider: Recollect.Embedding.Mock, mock: true],
+  table_prefix: "recollect_test_"

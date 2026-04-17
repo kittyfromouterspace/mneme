@@ -1,11 +1,11 @@
-defmodule Mneme.MixProject do
+defmodule Recollect.MixProject do
   use Mix.Project
 
   @version "0.4.4"
 
   def project do
     [
-      app: :mneme,
+      app: :recollect,
       version: @version,
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
@@ -22,7 +22,7 @@ defmodule Mneme.MixProject do
   def application do
     [
       extra_applications: [:logger],
-      mod: {Mneme.Application, []}
+      mod: {Recollect.Application, []}
     ]
   end
 
@@ -48,7 +48,7 @@ defmodule Mneme.MixProject do
       {:ecto_sqlite3, "~> 0.18", optional: true},
       {:sqlite_vec, "~> 0.1", optional: true},
 
-      # Local embedding support (optional - enables Mneme.Embedding.Local)
+      # Local embedding support (optional - enables Recollect.Embedding.Local)
       {:bumblebee, "~> 0.6.0", optional: true},
 
       # Dev/Test tooling
@@ -69,7 +69,7 @@ defmodule Mneme.MixProject do
   defp package do
     [
       licenses: ["BSD-3-Clause"],
-      links: %{"GitHub" => "https://github.com/kittyfromouterspace/mneme"}
+      links: %{"GitHub" => "https://github.com/kittyfromouterspace/recollect"}
     ]
   end
 end

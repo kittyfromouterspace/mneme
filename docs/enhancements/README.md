@@ -1,4 +1,4 @@
-# Mneme Enhancements — Hippo-Inspired Memory Mechanics
+# Recollect Enhancements — Hippo-Inspired Memory Mechanics
 
 > Based on analysis of [hippo-memory](https://github.com/hippo-memory), a biologically-inspired memory system for AI agents.
 > 
@@ -6,7 +6,7 @@
 
 ## Overview
 
-Hippo models seven properties of the human hippocampus. Mneme already shares several concepts (decay, confidence, hybrid search, dual-tier architecture). This document proposes enhancements that close the gaps and add unique capabilities — implemented using Elixir's OTP primitives rather than database tables wherever appropriate.
+Hippo models seven properties of the human hippocampus. Recollect already shares several concepts (decay, confidence, hybrid search, dual-tier architecture). This document proposes enhancements that close the gaps and add unique capabilities — implemented using Elixir's OTP primitives rather than database tables wherever appropriate.
 
 ### Enhancement Summary
 
@@ -26,9 +26,9 @@ Hippo models seven properties of the human hippocampus. Mneme already shares sev
 | 12 | Session Handoffs | Medium | Low | [12-session-handoffs.md](12-session-handoffs.md) |
 | 13 | Context Mipmaps | Medium | Medium | [13-context-mipmaps.md](13-context-mipmaps.md) |
 
-## What Mneme Already Has
+## What Recollect Already Has
 
-Mneme is not starting from zero. These concepts already exist and form the foundation:
+Recollect is not starting from zero. These concepts already exist and form the foundation:
 
 - **Decay mechanism** — archives entries after N days with low access count
 - **Confidence field** — float 0.0–1.0 on entries
@@ -39,14 +39,14 @@ Mneme is not starting from zero. These concepts already exist and form the found
 - **Dual scoping** — `owner_id` and `scope_id` on all schemas
 - **Content dedup** — hash-based deduplication in Tier 1 ingestion
 - **Supersession** — `supersedes` edge type for replacing stale knowledge
-- **TaskSupervisor** — existing `Mneme.TaskSupervisor` for async operations
-- **Telemetry** — `Mneme.Telemetry` for instrumentation
+- **TaskSupervisor** — existing `Recollect.TaskSupervisor` for async operations
+- **Telemetry** — `Recollect.Telemetry` for instrumentation
 
 ## Elixir OTP Strategy
 
 Rather than adding database tables for every new concept, these enhancements leverage Elixir's strengths:
 
-| Concept | Hippo (TypeScript) | Mneme (Elixir) | Rationale |
+| Concept | Hippo (TypeScript) | Recollect (Elixir) | Rationale |
 |---------|-------------------|----------------|-----------|
 | Working memory | SQLite table | **GenServer per scope** | Ephemeral, bounded, session-scoped |
 | Retrieval counters | In-memory | **ETS `:counter` + GenServer flush** | High-write, batch-flush to DB |
@@ -59,39 +59,39 @@ Rather than adding database tables for every new concept, these enhancements lev
 ## Supervision Tree
 
 ```
-Mneme.Supervisor (one_for_one)
-├── Mneme.TaskSupervisor                          [EXISTING]
+Recollect.Supervisor (one_for_one)
+├── Recollect.TaskSupervisor                          [EXISTING]
 │   ├── [async pipeline runs]
 │   ├── [async embed_entry tasks]
 │   ├── [async bump_access tasks]
 │   └── [consolidation parallel workers]
 │
-├── Mneme.RetrievalCounter (GenServer)            [NEW]
-│   └── Owns ETS :mneme_retrieval_counters (:counter)
+├── Recollect.RetrievalCounter (GenServer)            [NEW]
+│   └── Owns ETS :recollect_retrieval_counters (:counter)
 │   └── Periodic flush to DB every 30s
 │
-├── Mneme.WorkingMemory.Supervisor (DynamicSupervisor)  [NEW]
+├── Recollect.WorkingMemory.Supervisor (DynamicSupervisor)  [NEW]
 │   ├── WorkingMemory.Server (scope: "abc")       [NEW, dynamic]
 │   ├── WorkingMemory.Server (scope: "def")       [NEW, dynamic]
 │   └── ... (auto-started on push, auto-killed on flush)
 │
-├── Mneme.MaintenanceScheduler (GenServer)        [NEW, optional]
+├── Recollect.MaintenanceScheduler (GenServer)        [NEW, optional]
 │   └── Periodic decay + consolidation scheduling
 
 ETS Tables (no process owner):
-├── :mneme_last_retrieved — {scope_id, [entry_ids]}
-└── :mneme_schema_index — {tag_frequency, map}, {entry_count, int}
+├── :recollect_last_retrieved — {scope_id, [entry_ids]}
+└── :recollect_schema_index — {tag_frequency, map}, {entry_count, int}
 
 :persistent_term:
-├── {:mneme, :emotional_multipliers} → %{neutral: 1.0, ...}
-└── {:mneme, :retrieval_strengthening} → [half_life_boost_days: 2]
+├── {:recollect, :emotional_multipliers} → %{neutral: 1.0, ...}
+└── {:recollect, :retrieval_strengthening} → [half_life_boost_days: 2]
 ```
 
 ## Key Insight: Forgetting Is a Feature
 
-Hippo's core philosophy differs from Mneme's current approach:
+Hippo's core philosophy differs from Recollect's current approach:
 
-| | Mneme (current) | Hippo | Proposed |
+| | Recollect (current) | Hippo | Proposed |
 |--|-----------------|-------|----------|
 | **Decay** | Cleanup mechanism — archive old entries | Active filtering — memories must earn persistence | Active filtering with retrieval strengthening |
 | **Persistence** | Entries persist until explicitly decayed | Half-life by default, survival through use | Half-life + retrieval boost + outcome feedback |
@@ -147,10 +147,10 @@ All enhancements are additive. No breaking changes to existing APIs:
 
 ### Configuration
 
-All new features configurable via `config :mneme`:
+All new features configurable via `config :recollect`:
 
 ```elixir
-config :mneme,
+config :recollect,
   # Existing config...
   repo: MyApp.Repo,
 

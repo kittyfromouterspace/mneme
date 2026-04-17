@@ -4,7 +4,7 @@
 
 ## Problem
 
-Mneme treats all entries equally regardless of emotional significance. In human memory (and in Hippo), errors and breakthroughs get priority encoding — your first production incident is burned into memory, your 200th uneventful deploy isn't. The amygdala modulates hippocampal consolidation based on emotional significance.
+Recollect treats all entries equally regardless of emotional significance. In human memory (and in Hippo), errors and breakthroughs get priority encoding — your first production incident is burned into memory, your 200th uneventful deploy isn't. The amygdala modulates hippocampal consolidation based on emotional significance.
 
 ## Solution
 
@@ -12,7 +12,7 @@ Add `emotional_valence` field to entries with multipliers that affect strength c
 
 ## Schema Changes
 
-Add to `mneme_entries`:
+Add to `recollect_entries`:
 
 ```elixir
 add :emotional_valence, :string, default: "neutral", null: false
@@ -33,19 +33,19 @@ add :emotional_valence, :string, default: "neutral", null: false
 The multipliers map is read on every strength calculation. Using `:persistent_term` avoids repeated `Application.get_env/2` calls:
 
 ```elixir
-# In Mneme.Application.start/2:
+# In Recollect.Application.start/2:
 multipliers =
-  Application.get_env(:mneme, :emotional_valence, [])
+  Application.get_env(:recollect, :emotional_valence, [])
   |> Keyword.get(:multipliers, %{neutral: 1.0, positive: 1.3, negative: 1.5, critical: 2.0})
 
-:persistent_term.put({:mneme, :emotional_multipliers}, multipliers)
+:persistent_term.put({:recollect, :emotional_multipliers}, multipliers)
 ```
 
 Then in strength calculation (already shown in Enhancement 01):
 
 ```elixir
 defp emotional_multiplier(%{emotional_valence: valence}) do
-  multipliers = :persistent_term.get({:mneme, :emotional_multipliers}, %{})
+  multipliers = :persistent_term.get({:recollect, :emotional_multipliers}, %{})
   Map.get(multipliers, valence, 1.0)
 end
 ```
@@ -56,14 +56,14 @@ end
 
 ```elixir
 # Default (neutral)
-{:ok, entry} = Mneme.remember("Deploy script is at scripts/deploy.sh")
+{:ok, entry} = Recollect.remember("Deploy script is at scripts/deploy.sh")
 
 # With valence
-{:ok, entry} = Mneme.remember("FRED cache silently dropped tips_10y series",
+{:ok, entry} = Recollect.remember("FRED cache silently dropped tips_10y series",
   emotional_valence: :negative
 )
 
-{:ok, entry} = Mneme.remember("Migration must run before app starts",
+{:ok, entry} = Recollect.remember("Migration must run before app starts",
   emotional_valence: :critical
 )
 ```
@@ -71,7 +71,7 @@ end
 ### Auto-inference from entry_type or metadata
 
 ```elixir
-defmodule Mneme.Valence do
+defmodule Recollect.Valence do
   @doc "Infer emotional valence from entry options."
   def infer(opts) do
     cond do
@@ -86,11 +86,11 @@ defmodule Mneme.Valence do
 end
 ```
 
-### Integration with `Mneme.remember/2`
+### Integration with `Recollect.remember/2`
 
 ```elixir
 def remember(content, opts \\ []) do
-  valence = Mneme.Valence.infer(opts)
+  valence = Recollect.Valence.infer(opts)
   opts = Keyword.put(opts, :emotional_valence, valence)
 
   # ... existing entry creation ...
@@ -100,7 +100,7 @@ end
 ## Configuration
 
 ```elixir
-config :mneme,
+config :recollect,
   emotional_valence: [
     enabled: true,
     multipliers: %{
@@ -115,15 +115,15 @@ config :mneme,
 ## Migration
 
 ```elixir
-defmodule Mneme.Repo.Migrations.AddEmotionalValence do
+defmodule Recollect.Repo.Migrations.AddEmotionalValence do
   use Ecto.Migration
 
   def change do
-    alter table(:mneme_entries) do
+    alter table(:recollect_entries) do
       add :emotional_valence, :string, default: "neutral", null: false
     end
 
-    create index(:mneme_entries, [:emotional_valence])
+    create index(:recollect_entries, [:emotional_valence])
   end
 end
 ```

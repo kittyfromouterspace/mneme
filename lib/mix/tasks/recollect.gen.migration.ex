@@ -1,0 +1,225 @@
+defmodule Mix.Tasks.Recollect.Gen.Migration do
+  @moduledoc """
+  Generates Recollect database migrations in the host application.
+
+      mix recollect.gen.migration
+
+  ## Options
+
+  - `--dimensions` — Embedding vector dimensions (default: 1536)
+  - `--repo` — Ecto repo module (default: from config)
+  """
+  use Mix.Task
+
+  @impl true
+  def run(args) do
+    {opts, _, _} = OptionParser.parse(args, strict: [dimensions: :integer, repo: :string])
+    dimensions = Keyword.get(opts, :dimensions, 1536)
+
+    timestamp = Calendar.strftime(DateTime.utc_now(), "%Y%m%d%H%M%S")
+    filename = "#{timestamp}_create_recollect_tables.exs"
+
+    migrations_path = Path.join(["priv", "repo", "migrations"])
+    File.mkdir_p!(migrations_path)
+
+    target = Path.join(migrations_path, filename)
+
+    content = migration_content(dimensions)
+    File.write!(target, content)
+
+    IO.puts(IO.ANSI.green() <> "* creating " <> IO.ANSI.reset() <> target)
+    IO.puts("")
+    IO.puts("Run `mix ecto.migrate` to apply the migration.")
+  end
+
+  defp migration_content(dimensions) do
+    """
+    defmodule Recollect.Repo.Migrations.CreateRecollectTables do
+      use Ecto.Migration
+
+      def up do
+        # Enable pgvector extension
+        execute "CREATE EXTENSION IF NOT EXISTS vector"
+
+        # ── Tier 1: Full Pipeline ──────────────────────────────────────
+
+        create table(:recollect_collections, primary_key: false) do
+          add :id, :binary_id, primary_key: true
+          add :name, :string, null: false
+          add :collection_type, :string, null: false, default: "user"
+          add :owner_id, :uuid, null: false
+          add :scope_id, :uuid
+          add :metadata, :map, default: %{}
+          timestamps(type: :utc_datetime_usec)
+        end
+
+        create unique_index(:recollect_collections, [:owner_id, :name, :collection_type])
+        create index(:recollect_collections, [:scope_id])
+
+        create table(:recollect_documents, primary_key: false) do
+          add :id, :binary_id, primary_key: true
+          add :title, :string
+          add :content, :text
+          add :content_hash, :string
+          add :source_type, :string, null: false, default: "manual"
+          add :source_id, :string
+          add :source_version, :string
+          add :status, :string, null: false, default: "pending"
+          add :token_count, :integer, default: 0
+          add :metadata, :map, default: %{}
+          add :owner_id, :uuid, null: false
+          add :scope_id, :uuid
+          add :collection_id, references(:recollect_collections, type: :binary_id, on_delete: :delete_all), null: false
+          timestamps(type: :utc_datetime_usec)
+        end
+
+        create unique_index(:recollect_documents, [:collection_id, :source_type, :source_id])
+        create index(:recollect_documents, [:owner_id])
+        create index(:recollect_documents, [:scope_id])
+
+        create table(:recollect_chunks, primary_key: false) do
+          add :id, :binary_id, primary_key: true
+          add :sequence, :integer
+          add :content, :text
+          add :embedding, :"vector(#{dimensions})"
+          add :token_count, :integer, default: 0
+          add :start_offset, :integer, default: 0
+          add :end_offset, :integer, default: 0
+          add :metadata, :map, default: %{}
+          add :owner_id, :uuid, null: false
+          add :scope_id, :uuid
+          add :document_id, references(:recollect_documents, type: :binary_id, on_delete: :delete_all), null: false
+          add :inserted_at, :utc_datetime_usec, null: false, default: fragment("now()")
+        end
+
+        create index(:recollect_chunks, [:document_id])
+        create index(:recollect_chunks, [:owner_id])
+        create index(:recollect_chunks, [:scope_id])
+
+        execute \"\"\"
+        CREATE INDEX recollect_chunks_embedding_idx ON recollect_chunks
+        USING hnsw (embedding vector_cosine_ops)
+        WITH (m = 16, ef_construction = 64)
+        \"\"\"
+
+        create table(:recollect_entities, primary_key: false) do
+          add :id, :binary_id, primary_key: true
+          add :name, :string, null: false
+          add :entity_type, :string, null: false
+          add :description, :text
+          add :properties, :map, default: %{}
+          add :mention_count, :integer, default: 1
+          add :first_seen_at, :utc_datetime_usec
+          add :last_seen_at, :utc_datetime_usec
+          add :embedding, :"vector(#{dimensions})"
+          add :owner_id, :uuid, null: false
+          add :scope_id, :uuid
+          add :collection_id, references(:recollect_collections, type: :binary_id, on_delete: :delete_all), null: false
+          timestamps(type: :utc_datetime_usec)
+        end
+
+        create unique_index(:recollect_entities, [:collection_id, :name, :entity_type])
+        create index(:recollect_entities, [:owner_id])
+        create index(:recollect_entities, [:scope_id])
+
+        execute \"\"\"
+        CREATE INDEX recollect_entities_embedding_idx ON recollect_entities
+        USING hnsw (embedding vector_cosine_ops)
+        WITH (m = 16, ef_construction = 64)
+        \"\"\"
+
+        create table(:recollect_relations, primary_key: false) do
+          add :id, :binary_id, primary_key: true
+          add :relation_type, :string, null: false
+          add :weight, :float, default: 1.0
+          add :properties, :map, default: %{}
+          add :owner_id, :uuid, null: false
+          add :scope_id, :uuid
+          add :from_entity_id, references(:recollect_entities, type: :binary_id, on_delete: :delete_all), null: false
+          add :to_entity_id, references(:recollect_entities, type: :binary_id, on_delete: :delete_all), null: false
+          add :source_chunk_id, references(:recollect_chunks, type: :binary_id, on_delete: :nilify_all)
+          timestamps(type: :utc_datetime_usec)
+        end
+
+        create unique_index(:recollect_relations, [:from_entity_id, :to_entity_id, :relation_type])
+        create index(:recollect_relations, [:owner_id])
+        create index(:recollect_relations, [:scope_id])
+
+        create constraint(:recollect_relations, :no_self_relation,
+          check: "from_entity_id != to_entity_id"
+        )
+
+        create table(:recollect_pipeline_runs, primary_key: false) do
+          add :id, :binary_id, primary_key: true
+          add :status, :string, null: false, default: "pending"
+          add :step_details, :map, default: %{}
+          add :error, :text
+          add :tokens_used, :integer, default: 0
+          add :cost_usd, :float, default: 0.0
+          add :started_at, :utc_datetime_usec
+          add :completed_at, :utc_datetime_usec
+          add :owner_id, :uuid, null: false
+          add :scope_id, :uuid
+          add :document_id, references(:recollect_documents, type: :binary_id, on_delete: :delete_all), null: false
+          timestamps(type: :utc_datetime_usec)
+        end
+
+        create index(:recollect_pipeline_runs, [:document_id])
+        create index(:recollect_pipeline_runs, [:scope_id])
+
+        # ── Tier 2: Lightweight Knowledge ──────────────────────────────
+
+        create table(:recollect_entries, primary_key: false) do
+          add :id, :binary_id, primary_key: true
+          add :scope_id, :uuid
+          add :owner_id, :uuid
+          add :entry_type, :string, null: false, default: "note"
+          add :content, :text, null: false
+          add :summary, :text
+          add :source, :string, default: "system"
+          add :source_id, :string
+          add :embedding, :"vector(#{dimensions})"
+          add :metadata, :map, default: %{}
+          add :access_count, :integer, default: 0
+          add :last_accessed_at, :utc_datetime_usec
+          add :confidence, :float, default: 1.0
+          timestamps(type: :utc_datetime_usec)
+        end
+
+        create index(:recollect_entries, [:scope_id])
+        create index(:recollect_entries, [:owner_id])
+        create index(:recollect_entries, [:scope_id, :last_accessed_at])
+
+        execute \"\"\"
+        CREATE INDEX recollect_entries_embedding_idx ON recollect_entries
+        USING hnsw (embedding vector_cosine_ops)
+        WITH (m = 16, ef_construction = 64)
+        \"\"\"
+
+        create table(:recollect_edges, primary_key: false) do
+          add :id, :binary_id, primary_key: true
+          add :relation, :string, null: false
+          add :weight, :float, default: 1.0
+          add :metadata, :map, default: %{}
+          add :source_entry_id, references(:recollect_entries, type: :binary_id, on_delete: :delete_all), null: false
+          add :target_entry_id, references(:recollect_entries, type: :binary_id, on_delete: :delete_all), null: false
+          timestamps(type: :utc_datetime_usec)
+        end
+
+        create unique_index(:recollect_edges, [:source_entry_id, :target_entry_id, :relation])
+      end
+
+      def down do
+        drop table(:recollect_edges)
+        drop table(:recollect_entries)
+        drop table(:recollect_pipeline_runs)
+        drop table(:recollect_relations)
+        drop table(:recollect_entities)
+        drop table(:recollect_chunks)
+        drop table(:recollect_documents)
+        drop table(:recollect_collections)
+      end
+    end
+    """
+  end
+end

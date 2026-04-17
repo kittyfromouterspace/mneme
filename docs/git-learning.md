@@ -1,6 +1,6 @@
 # Learning Pipeline
 
-This document describes how Mneme learns from development activity — git history and coding agent sessions — covering the full pipeline from raw events to synthesized memory entries and stack deprecation events.
+This document describes how Recollect learns from development activity — git history and coding agent sessions — covering the full pipeline from raw events to synthesized memory entries and stack deprecation events.
 
 ## Overview
 
@@ -24,16 +24,16 @@ CodingAgent dispatcher ──→ discover providers ──→ for each available
   └── summarize sessions → batched development_insight
 ```
 
-Both pipelines use the same `Mneme.Learner` behaviour and are orchestrated by `Mneme.Learning.Pipeline`.
+Both pipelines use the same `Recollect.Learner` behaviour and are orchestrated by `Recollect.Learning.Pipeline`.
 
 ## Coding Agent Learning
 
-The `Mneme.Learner.CodingAgent` module is a dispatcher that discovers and delegates to provider modules for each supported coding agent (Claude Code, Codex, Gemini, OpenCode). Each provider implements `Mneme.Learner.CodingAgent.Provider` and handles the specifics of its agent's data layout.
+The `Recollect.Learner.CodingAgent` module is a dispatcher that discovers and delegates to provider modules for each supported coding agent (Claude Code, Codex, Gemini, OpenCode). Each provider implements `Recollect.Learner.CodingAgent.Provider` and handles the specifics of its agent's data layout.
 
 ### Provider architecture
 
 ```
-lib/mneme/learning/coding_agent.ex           # Dispatcher — implements Mneme.Learner
+lib/mneme/learning/coding_agent.ex           # Dispatcher — implements Recollect.Learner
 lib/mneme/learning/coding_agent/
 ├── provider.ex       # Behaviour: agent_name, available?, discover, fetch, extract, summarize
 ├── util.ex           # Shared helpers: frontmatter parsing, JSONL, project tags
@@ -75,7 +75,7 @@ Reads from `~/.local/share/opencode/opencode.db` (SQLite):
 ### Adding new providers
 
 1. Create `lib/mneme/learning/coding_agent/my_agent.ex`
-2. Implement `Mneme.Learner.CodingAgent.Provider` behaviour
+2. Implement `Recollect.Learner.CodingAgent.Provider` behaviour
 3. Add the module to `@providers` in `coding_agent.ex`
 4. The dispatcher auto-discovers available providers at runtime
 
@@ -91,7 +91,7 @@ Reads from `~/.local/share/opencode/opencode.db` (SQLite):
 
 ## Layer 1: Per-Event Extraction
 
-**Module:** `Mneme.Learner.Git.extract/1`
+**Module:** `Recollect.Learner.Git.extract/1`
 
 Not every commit deserves its own memory entry. The extract function applies two filters:
 
@@ -118,13 +118,13 @@ Everything else (`:fix`, `:feat`, `:refactor`, `:test`, `:docs`, `:other`) retur
 
 ## Layer 2: Batch Summarization
 
-**Module:** `Mneme.Learner.Git.summarize/2` (called by `Mneme.Learning.Pipeline`)
+**Module:** `Recollect.Learner.Git.summarize/2` (called by `Recollect.Learning.Pipeline`)
 
 The optional `summarize/2` learner callback receives all fetched events and returns synthesized extracts. For the Git learner, this means two sub-steps: grouping and stack detection.
 
 ### 2a. Commit Grouping (Grouper)
 
-**Module:** `Mneme.Learner.Git.Grouper`
+**Module:** `Recollect.Learner.Git.Grouper`
 
 1. **Filter noise** — same noise filter as Layer 1 (merges, version bumps, typos)
 2. **Extract topics** — conventional-commit scope (`feat(auth):...`) or keyword extraction from the subject
@@ -166,7 +166,7 @@ Singletons (topics with only 1 commit) are only emitted if the commit is signifi
 
 ### 2b. Stack Transition Detection (StackDetector)
 
-**Module:** `Mneme.Learner.Git.StackDetector`
+**Module:** `Recollect.Learner.Git.StackDetector`
 
 StackDetector scans commits for technology transitions and cross-references against a catalog of known migration paths.
 
@@ -220,7 +220,7 @@ When a transition is detected, the `summarize/2` function returns an extract wit
 
 ## Deprecation Flow
 
-**Module:** `Mneme.Invalidation.deprecate/4`
+**Module:** `Recollect.Invalidation.deprecate/4`
 
 When a stack transition is detected (e.g. webpack → vite):
 
@@ -254,7 +254,7 @@ Three things happen atomically:
 
 ## Pipeline Orchestration
 
-**Module:** `Mneme.Learning.Pipeline`
+**Module:** `Recollect.Learning.Pipeline`
 
 ```
 Pipeline.run(scope_id: id)
@@ -287,13 +287,13 @@ Context hints (git repo, file path, OS) are auto-captured by `Knowledge.remember
 
 ```
 lib/mneme/learning/
-├── behaviour.ex          # Mneme.Learner behaviour definition
+├── behaviour.ex          # Recollect.Learner behaviour definition
 ├── pipeline.ex           # Orchestration: fetch → extract → summarize → store
-├── git.ex                # Mneme.Learner.Git — fetch, extract, summarize
+├── git.ex                # Recollect.Learner.Git — fetch, extract, summarize
 ├── git/
 │   ├── grouper.ex        # Commit grouping and insight synthesis
 │   └── stack_detector.ex # Technology detection and transition tracking
-├── coding_agent.ex       # Mneme.Learner.CodingAgent — dispatcher
+├── coding_agent.ex       # Recollect.Learner.CodingAgent — dispatcher
 └── coding_agent/
     ├── provider.ex       # Provider behaviour
     ├── util.ex           # Shared helpers (frontmatter, JSONL, project tags)
@@ -312,25 +312,25 @@ lib/mneme/
 
 ```elixir
 # Run all learners (Git, CodingAgent)
-{:ok, result} = Mneme.learn(scope_id: workspace_id)
+{:ok, result} = Recollect.learn(scope_id: workspace_id)
 
 # Run git learner only
-{:ok, result} = Mneme.learn(scope_id: workspace_id, sources: [:git])
+{:ok, result} = Recollect.learn(scope_id: workspace_id, sources: [:git])
 
 # Preview without storing
-{:ok, preview} = Mneme.learn(scope_id: workspace_id, dry_run: true)
+{:ok, preview} = Recollect.learn(scope_id: workspace_id, dry_run: true)
 
 # Trigger deprecation manually
-Mneme.Invalidation.deprecate(scope_id, "webpack", "vite",
+Recollect.Invalidation.deprecate(scope_id, "webpack", "vite",
   category: :build_tool,
   evidence: "manual deprecation"
 )
 
 # Detect current stack
-stack = Mneme.Learner.Git.StackDetector.detect_current()
+stack = Recollect.Learner.Git.StackDetector.detect_current()
 # => %{"vite" => %{category: :build_tool, evidence: [...]}, ...}
 
 # Detect transitions from last 30 days
-transitions = Mneme.Learner.Git.StackDetector.detect_transitions("30 days ago")
+transitions = Recollect.Learner.Git.StackDetector.detect_transitions("30 days ago")
 # => [%{type: :deprecation, from: "jest", to: "vitest", ...}]
 ```
