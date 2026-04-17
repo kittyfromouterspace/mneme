@@ -29,7 +29,12 @@ defmodule Recollect.Learner.CodingAgent.Codex do
   def data_paths, do: default_data_paths()
 
   @impl true
-  def available?(config \\ %{}), do: Util.dir_exists?(hd(resolve_paths(config)))
+  def available?(config \\ %{}) do
+    case resolve_paths(config) do
+      [] -> false
+      [path | _] -> Util.dir_exists?(path)
+    end
+  end
 
   @impl true
   def fetch_events(config \\ %{}), do: fetch_events(config, [])
@@ -150,7 +155,7 @@ defmodule Recollect.Learner.CodingAgent.Codex do
               {:ok, dt, _} ->
                 case File.stat(path) do
                   {:ok, stat} ->
-                    file_dt = mtime_to_datetime(stat.mtime)
+                    file_dt = Util.mtime_to_datetime(stat.mtime)
                     DateTime.after?(file_dt, dt)
 
                   _ ->
@@ -247,14 +252,5 @@ defmodule Recollect.Learner.CodingAgent.Codex do
     end
   end
 
-  defp resolve_paths(%{data_paths: [_ | _] = paths}), do: paths
-  defp resolve_paths(_), do: default_data_paths()
-
-  defp mtime_to_datetime({{y, m, d}, {h, min, s}}) do
-    {:ok, ndt} = NaiveDateTime.new(y, m, d, h, min, s)
-    DateTime.from_naive!(ndt, "Etc/UTC")
-  end
-
-  defp mtime_to_datetime(unix) when is_integer(unix), do: DateTime.from_unix!(unix)
-  defp mtime_to_datetime(_), do: DateTime.utc_now()
+  defp resolve_paths(config), do: Util.resolve_paths(config)
 end

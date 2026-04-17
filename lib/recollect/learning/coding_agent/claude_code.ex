@@ -51,7 +51,12 @@ defmodule Recollect.Learner.CodingAgent.ClaudeCode do
   def data_paths, do: default_data_paths()
 
   @impl true
-  def available?(config \\ %{}), do: Util.dir_exists?(hd(resolve_paths(config)))
+  def available?(config \\ %{}) do
+    case resolve_paths(config) do
+      [] -> false
+      [path | _] -> Util.dir_exists?(path)
+    end
+  end
 
   @impl true
   def fetch_events(config \\ %{}), do: fetch_events(config, [])
@@ -275,46 +280,16 @@ defmodule Recollect.Learner.CodingAgent.ClaudeCode do
     |> Enum.reject(&is_nil/1)
   end
 
-  defp file_newer_than?(_path, nil), do: true
+  defp file_newer_than?(path, since), do: Util.file_newer_than?(path, since)
 
-  defp file_newer_than?(path, since_str) when is_binary(since_str) do
-    case DateTime.from_iso8601(since_str) do
-      {:ok, since_dt, _} -> file_newer_than?(path, since_dt)
-      _ -> true
-    end
-  end
-
-  defp file_newer_than?(path, %DateTime{} = since_dt) do
-    case File.stat(path) do
-      {:ok, stat} ->
-        file_dt = mtime_to_datetime(stat.mtime)
-        DateTime.after?(file_dt, since_dt)
-
-      _ ->
-        true
-    end
-  end
+  defp resolve_paths(config), do: Util.resolve_paths(config)
 
   defp file_mtime(path) do
     case File.stat(path) do
-      {:ok, stat} -> mtime_to_datetime(stat.mtime)
+      {:ok, stat} -> Util.mtime_to_datetime(stat.mtime)
       _ -> nil
     end
   end
-
-  defp mtime_to_datetime({{y, m, d}, {h, min, s}}) do
-    {:ok, ndt} = NaiveDateTime.new(y, m, d, h, min, s)
-    DateTime.from_naive!(ndt, "Etc/UTC")
-  end
-
-  defp mtime_to_datetime(unix) when is_integer(unix) do
-    DateTime.from_unix!(unix)
-  end
-
-  defp mtime_to_datetime(_), do: DateTime.utc_now()
-
-  defp resolve_paths(%{data_paths: [_ | _] = paths}), do: paths
-  defp resolve_paths(_), do: default_data_paths()
 
   defp detect_memory_type(filename) do
     name = String.downcase(filename)

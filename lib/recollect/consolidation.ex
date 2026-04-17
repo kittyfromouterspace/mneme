@@ -104,14 +104,6 @@ defmodule Recollect.Consolidation do
     {:ok, result}
   end
 
-  @doc """
-  Preview what consolidation would do without making changes.
-  """
-  def dry_run(opts \\ []) do
-    opts = Keyword.put(opts, :dry_run, true)
-    run(opts)
-  end
-
   defp fetch_entries(scope_id, repo) do
     case repo.query(
            """
@@ -120,11 +112,11 @@ defmodule Recollect.Consolidation do
              FROM recollect_entries
              WHERE scope_id = $1 AND entry_type != 'archived'
            """,
-           [uuid_to_bin(scope_id)]
+           [Recollect.Util.uuid_to_bin(scope_id)]
          ) do
       {:ok, %{rows: rows, columns: columns}} ->
         Enum.map(rows, fn row ->
-          columns |> Enum.zip(row) |> Map.new()
+          Recollect.Util.row_to_map(columns, row)
         end)
 
       _ ->
@@ -134,7 +126,7 @@ defmodule Recollect.Consolidation do
 
   defp fetch_owner_id(scope_id, repo) do
     case repo.query("SELECT owner_id FROM recollect_entries WHERE scope_id = $1 LIMIT 1", [
-           uuid_to_bin(scope_id)
+           Recollect.Util.uuid_to_bin(scope_id)
          ]) do
       {:ok, %{rows: [[owner_id]]}} -> owner_id
       _ -> nil
@@ -169,7 +161,7 @@ defmodule Recollect.Consolidation do
           fn {i, j} ->
             a = Enum.at(entries, i)
             b = Enum.at(entries, j)
-            {i, j, text_overlap(a["content"], b["content"])}
+            {i, j, Recollect.Util.text_overlap(a["content"], b["content"])}
           end,
           max_concurrency: System.schedulers_online(),
           timeout: 30_000
@@ -247,35 +239,6 @@ defmodule Recollect.Consolidation do
     end
   end
 
-  defp text_overlap(a, b) do
-    set_a = tokenize(a)
-    set_b = tokenize(b)
-    size_a = MapSet.size(set_a)
-    size_b = MapSet.size(set_b)
-
-    if size_a == 0 and size_b == 0 do
-      1.0
-    else
-      intersection = set_a |> MapSet.intersection(set_b) |> MapSet.size()
-      union = set_a |> MapSet.union(set_b) |> MapSet.size()
-
-      if union == 0 do
-        0.0
-      else
-        intersection / union
-      end
-    end
-  end
-
-  defp tokenize(text) do
-    text
-    |> String.downcase()
-    |> String.replace(~r/[^\w\s]/, " ")
-    |> String.split()
-    |> Enum.filter(fn t -> String.length(t) > 1 end)
-    |> MapSet.new()
-  end
-
   defp persist_consolidation_run(scope_id, owner_id, results, duration_ms) do
     repo = Config.repo()
     now = DateTime.utc_now()
@@ -288,7 +251,7 @@ defmodule Recollect.Consolidation do
       """,
       [
         Ecto.UUID.generate(),
-        uuid_to_bin(scope_id),
+        Recollect.Util.uuid_to_bin(scope_id),
         owner_id,
         now,
         results.decayed,
@@ -319,17 +282,10 @@ defmodule Recollect.Consolidation do
             (id, scope_id, owner_id, entry_type, content, confidence, half_life_days, pinned, emotional_valence, schema_fit, confidence_state, inserted_at, updated_at)
           VALUES ($1, $2, $3, 'note', $4, 0.8, 14.0, false, 'neutral', 0.6, 'active', $5, $5)
         """,
-        [Ecto.UUID.generate(), uuid_to_bin(scope_id), uuid_to_bin(owner_id), summary, now]
+        [Ecto.UUID.generate(), Recollect.Util.uuid_to_bin(scope_id), Recollect.Util.uuid_to_bin(owner_id), summary, now]
       )
     end
 
     {:ok, length(summaries)}
-  end
-
-  defp uuid_to_bin(id) when is_binary(id) do
-    case Ecto.UUID.dump(id) do
-      {:ok, bin} -> bin
-      :error -> id
-    end
   end
 end

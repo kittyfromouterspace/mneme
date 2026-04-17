@@ -269,9 +269,10 @@ defmodule Recollect.Import do
     adapter.format_uuid(value)
   end
 
-  # Handle datetime strings
-  defp transform_value_for_insert(_key, value, _adapter) when is_binary(value) do
-    # Try to parse as datetime
+  @datetime_fields ~w(inserted_at updated_at last_accessed_at timestamp created_at)
+
+  # Handle datetime fields by name
+  defp transform_value_for_insert(key, value, _adapter) when key in @datetime_fields and is_binary(value) do
     case DateTime.from_iso8601(value) do
       {:ok, dt, _} -> dt
       _ -> value

@@ -60,7 +60,7 @@ defmodule Recollect.Mipmap do
             VALUES ($1, $2, $3, $4)
             ON CONFLICT (entry_id, level) DO UPDATE SET content = $3, metadata = $4
           """,
-          [uuid_to_bin(entry.id), level, data.content, Jason.encode!(data.metadata)]
+          [Recollect.Util.uuid_to_bin(entry.id), level, data.content, Jason.encode!(data.metadata)]
         )
     end)
 
@@ -98,7 +98,7 @@ defmodule Recollect.Mipmap do
         LIMIT $4
         """
 
-        case repo.query(sql, [embedding_str, uuid_to_bin(scope_id), actual_level, limit]) do
+        case repo.query(sql, [embedding_str, Recollect.Util.uuid_to_bin(scope_id), actual_level, limit]) do
           {:ok, %{rows: rows, columns: columns}} ->
             results =
               Enum.map(rows, fn row ->
@@ -189,12 +189,5 @@ defmodule Recollect.Mipmap do
     |> String.split()
     |> Enum.find(fn w -> String.length(w) > 4 end)
     |> Kernel.||(String.slice(content, 0, 20))
-  end
-
-  defp uuid_to_bin(id) when is_binary(id) do
-    case Ecto.UUID.dump(id) do
-      {:ok, bin} -> bin
-      :error -> id
-    end
   end
 end

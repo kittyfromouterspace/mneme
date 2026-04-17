@@ -121,13 +121,6 @@ defmodule Recollect.Export do
     end
   end
 
-  @doc """
-  Returns a list of exportable tables.
-  """
-  def exportable_tables do
-    @tables
-  end
-
   # ── Private Functions ─────────────────────────────────────────────────
 
   defp export_table_to_file(file, table, batch_size, opts) do

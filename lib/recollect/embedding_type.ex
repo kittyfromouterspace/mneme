@@ -99,13 +99,4 @@ defmodule Recollect.EmbeddingType do
     def load(nil), do: {:ok, nil}
     def load(_), do: :error
   end
-
-  @doc """
-  Format an embedding for SQL insertion.
-  Returns the appropriate format for the configured adapter.
-  """
-  def format_for_sql(embedding) when is_list(embedding) do
-    adapter = Config.adapter()
-    adapter.format_embedding(embedding)
-  end
 end

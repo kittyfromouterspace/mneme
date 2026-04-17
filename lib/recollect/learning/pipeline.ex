@@ -23,7 +23,7 @@ defmodule Recollect.Learning.Pipeline do
   alias Recollect.Knowledge
   alias Recollect.Telemetry
 
-  @default_learners [Recollect.Learner.Git, Recollect.Learner.ClaudeCode, Recollect.Learner.OpenCode]
+  @default_learners [Recollect.Learner.Git, Recollect.Learner.CodingAgent]
 
   @doc """
   Run learning from configured sources.
@@ -134,11 +134,43 @@ defmodule Recollect.Learning.Pipeline do
               acc
           end)
 
+        learned_from_summaries =
+          if function_exported?(learner_module, :summarize, 2) do
+            events
+            |> learner_module.summarize(scope_id)
+            |> Enum.filter(fn
+              %{content: content} when is_binary(content) and content != "" -> true
+              _ -> false
+            end)
+            |> Enum.reduce({[], []}, fn extract, {l, s} ->
+              if dry_run do
+                {[extract | l], s}
+              else
+                case Knowledge.remember(extract.content,
+                       entry_type: Map.get(extract, :entry_type, :note),
+                       emotional_valence: Map.get(extract, :emotional_valence, :neutral),
+                       tags: Map.get(extract, :tags, []),
+                       metadata: Map.put(Map.get(extract, :metadata, %{}), :learned_from, source),
+                       source: "system"
+                     ) do
+                  {:ok, _} -> {[extract | l], s}
+                  _ -> {l, s}
+                end
+              end
+            end)
+            |> then(fn {l, s} -> {l, s} end)
+          else
+            {[], []}
+          end
+
+        total_learned = learned ++ elem(learned_from_summaries, 0)
+        total_skipped = skipped ++ elem(learned_from_summaries, 1)
+
         {source,
          %{
            fetched: length(events),
-           learned: length(learned),
-           skipped: length(skipped)
+           learned: length(total_learned),
+           skipped: length(total_skipped)
          }}
 
       {:error, reason} ->

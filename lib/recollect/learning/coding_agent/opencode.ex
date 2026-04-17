@@ -29,8 +29,10 @@ defmodule Recollect.Learner.CodingAgent.OpenCode do
 
   @impl true
   def available?(config \\ %{}) do
-    path = Path.join(Util.expand(hd(resolve_paths(config))), "opencode.db")
-    File.exists?(path)
+    case resolve_paths(config) do
+      [] -> false
+      [path | _] -> File.exists?(Path.join(Util.expand(path), "opencode.db"))
+    end
   end
 
   @impl true
@@ -136,8 +138,7 @@ defmodule Recollect.Learner.CodingAgent.OpenCode do
     end
   end
 
-  defp resolve_paths(%{data_paths: [_ | _] = paths}), do: paths
-  defp resolve_paths(_), do: default_data_paths()
+  defp resolve_paths(config), do: Util.resolve_paths(config)
 
   defp parse_session_row(%{"id" => id, "title" => title, "directory" => directory, "path" => project_path}) do
     project =

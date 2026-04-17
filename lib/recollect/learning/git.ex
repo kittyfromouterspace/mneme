@@ -102,6 +102,36 @@ defmodule Recollect.Learner.Git do
     end)
   end
 
+  @impl true
+  def summarize(events, scope_id) do
+    insights = Recollect.Learner.Git.Grouper.summarize(events)
+
+    deprecations =
+      events
+      |> Recollect.Learner.Git.StackDetector.detect_transitions_from_commits()
+      |> Enum.map(fn transition ->
+        %{
+          content: "DEPRECATED: #{transition.from} has been replaced by #{transition.to}.",
+          entry_type: :development_insight,
+          emotional_valence: :neutral,
+          tags: ["deprecation", "stack-transition", transition.from, transition.to],
+          metadata: %{
+            source: :git,
+            insight_type: :deprecation,
+            from: transition.from,
+            to: transition.to,
+            category: transition.category,
+            evidence: transition.evidence
+          },
+          half_life_days: 60.0,
+          confidence: 1.0,
+          pinned: true
+        }
+      end)
+
+    insights ++ deprecations
+  end
+
   @doc "Run the full git learning pipeline for a scope."
   def run(opts \\ []) do
     scope_id = Keyword.get(opts, :scope_id)

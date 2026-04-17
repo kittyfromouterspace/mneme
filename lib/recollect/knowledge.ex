@@ -257,17 +257,25 @@ defmodule Recollect.Knowledge do
   defp detect_attribution_conflict(claim, entry_content) do
     entity = claim[:entity]
     claim_object = String.downcase(claim[:object])
+    entity_lower = String.downcase(entity)
 
-    # Check if entry mentions a different entity doing the same thing
-    potential_others =
-      Enum.reject(~w[Alice Bob Charlie Maya Kai Priya Alex Sam Jordan], &(String.downcase(&1) == String.downcase(entity)))
+    # Check if entry mentions a different person for the same work
+    # by looking for capitalized words that could be names near the claim object
+    name_pattern = ~r/\b([A-Z][a-z]+)\b/
+
+    names_in_entry =
+      name_pattern
+      |> Regex.scan(entry_content)
+      |> Enum.map(fn [name] -> String.downcase(name) end)
+      |> Enum.reject(&(&1 == entity_lower))
 
     other_mentioned =
-      Enum.find(potential_others, fn other ->
-        String.contains?(entry_content, String.downcase(other))
+      Enum.find(names_in_entry, fn name ->
+        String.contains?(entry_content, claim_object) and
+          String.contains?(entry_content, name)
       end)
 
-    if other_mentioned && String.contains?(entry_content, String.downcase(claim_object)) do
+    if other_mentioned do
       :attribution_conflict
     end
   end

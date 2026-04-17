@@ -124,4 +124,38 @@ defmodule Recollect.Learner.CodingAgent.Util do
   end
 
   defp pull_user_text(_), do: []
+
+  @doc false
+  def resolve_paths(%{data_paths: [_ | _] = paths}), do: paths
+  def resolve_paths(_), do: []
+
+  @doc false
+  def file_newer_than?(_path, nil), do: true
+
+  def file_newer_than?(path, since_str) when is_binary(since_str) do
+    case DateTime.from_iso8601(since_str) do
+      {:ok, since_dt, _} -> file_newer_than?(path, since_dt)
+      _ -> true
+    end
+  end
+
+  def file_newer_than?(path, %DateTime{} = since_dt) do
+    case File.stat(path) do
+      {:ok, stat} ->
+        file_dt = mtime_to_datetime(stat.mtime)
+        DateTime.after?(file_dt, since_dt)
+
+      _ ->
+        true
+    end
+  end
+
+  @doc false
+  def mtime_to_datetime({{y, m, d}, {h, min, s}}) do
+    {:ok, ndt} = NaiveDateTime.new(y, m, d, h, min, s)
+    DateTime.from_naive!(ndt, "Etc/UTC")
+  end
+
+  def mtime_to_datetime(unix) when is_integer(unix), do: DateTime.from_unix!(unix)
+  def mtime_to_datetime(_), do: DateTime.utc_now()
 end

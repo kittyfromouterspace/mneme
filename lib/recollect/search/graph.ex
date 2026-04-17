@@ -45,7 +45,7 @@ defmodule Recollect.Search.Graph do
     if entry_ids == [] do
       {:ok, []}
     else
-      bin_ids = entry_ids |> Enum.map(&uuid_to_bin/1) |> Enum.reject(&is_nil/1)
+      bin_ids = entry_ids |> Enum.map(&Recollect.Util.uuid_to_bin/1) |> Enum.reject(&is_nil/1)
 
       sql = """
       WITH RECURSIVE edge_walk AS (
@@ -91,13 +91,6 @@ defmodule Recollect.Search.Graph do
           Logger.error("Recollect edge traversal failed: #{inspect(reason)}")
           {:error, reason}
       end
-    end
-  end
-
-  defp uuid_to_bin(id) when is_binary(id) do
-    case Ecto.UUID.dump(id) do
-      {:ok, bin} -> bin
-      :error -> nil
     end
   end
 end

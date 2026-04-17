@@ -53,8 +53,8 @@ defmodule Recollect.Handoff do
         """,
         [
           Ecto.UUID.generate(),
-          uuid_to_bin(scope_id),
-          session_id && uuid_to_bin(session_id),
+          Recollect.Util.uuid_to_bin(scope_id),
+          session_id && Recollect.Util.uuid_to_bin(session_id),
           what,
           Jason.encode!(next),
           Jason.encode!(artifacts),
@@ -92,7 +92,7 @@ defmodule Recollect.Handoff do
              ORDER BY created_at DESC
              LIMIT 1
            """,
-           [uuid_to_bin(scope_id)]
+           [Recollect.Util.uuid_to_bin(scope_id)]
          ) do
       {:ok,
        %{
@@ -151,7 +151,7 @@ defmodule Recollect.Handoff do
              WHERE scope_id = $1 AND created_at >= $2
              ORDER BY created_at DESC
            """,
-           [uuid_to_bin(scope_id), since]
+           [Recollect.Util.uuid_to_bin(scope_id), since]
          ) do
       {:ok, %{rows: rows}} ->
         handoffs =
@@ -190,7 +190,7 @@ defmodule Recollect.Handoff do
             LIMIT $2
           )
       """,
-      [uuid_to_bin(scope_id), keep_count]
+      [Recollect.Util.uuid_to_bin(scope_id), keep_count]
     )
   end
 
@@ -207,11 +207,4 @@ defmodule Recollect.Handoff do
   end
 
   defp decode_json_or_list(other, default), do: other || default
-
-  defp uuid_to_bin(id) when is_binary(id) do
-    case Ecto.UUID.dump(id) do
-      {:ok, bin} -> bin
-      :error -> id
-    end
-  end
 end

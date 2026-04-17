@@ -75,26 +75,21 @@ defmodule Recollect.Pipeline do
                  repo
                ),
              {:ok, _} <- do_embed_entities(extraction.entities),
-             {:ok, _run} <-
+             final_tokens = embedding_usage[:tokens_used] || 0,
+             {:ok, updated_run} <-
                update_run(
                  run,
                  "complete",
                  %{
-                   tokens_used: embedding_usage[:tokens_used] || 0
+                   tokens_used: final_tokens
                  },
                  repo
                ) do
-          # Update run with final token count
-          run
-          |> PipelineRun.changeset(%{tokens_used: embedding_usage[:tokens_used] || 0})
-          |> repo.update()
-
-          # Mark document as ready
           document
           |> Ecto.Changeset.change(%{status: "ready"})
           |> repo.update()
 
-          {:ok, run}
+          {:ok, updated_run}
         end
 
       case result do

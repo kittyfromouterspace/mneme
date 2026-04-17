@@ -167,7 +167,7 @@ defmodule Recollect.Invalidation do
             AND content ILIKE $4
             AND half_life_days > 0.5
         """,
-        [@default_weaken_factor, DateTime.utc_now(), uuid_to_bin(scope_id), pattern]
+        [@default_weaken_factor, DateTime.utc_now(), Recollect.Util.uuid_to_bin(scope_id), pattern]
       )
 
     case result do
@@ -190,19 +190,12 @@ defmodule Recollect.Invalidation do
             AND entry_type != 'archived'
             AND content ILIKE $4
         """,
-        [factor, DateTime.utc_now(), uuid_to_bin(scope_id), "%#{pattern}%"]
+        [factor, DateTime.utc_now(), Recollect.Util.uuid_to_bin(scope_id), "%#{pattern}%"]
       )
 
     case result do
       {:ok, %{num_rows: count}} -> count
       _ -> 0
-    end
-  end
-
-  defp uuid_to_bin(id) when is_binary(id) do
-    case Ecto.UUID.dump(id) do
-      {:ok, bin} -> bin
-      :error -> id
     end
   end
 end

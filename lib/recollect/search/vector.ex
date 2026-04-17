@@ -161,7 +161,7 @@ defmodule Recollect.Search.Vector do
 
     case repo.query(sql, params) do
       {:ok, %{rows: rows, columns: columns}} ->
-        {:ok, Enum.map(rows, fn row -> row_to_map(columns, row) end)}
+        {:ok, Enum.map(rows, fn row -> Recollect.Util.row_to_map(columns, row) end)}
 
       {:error, reason} ->
         Logger.error("Recollect vector search (chunks) failed: #{inspect(reason)}")
@@ -177,7 +177,7 @@ defmodule Recollect.Search.Vector do
 
     case repo.query(sql, params) do
       {:ok, %{rows: rows, columns: columns}} ->
-        results = Enum.map(rows, fn row -> row_to_map(columns, row) end)
+        results = Enum.map(rows, fn row -> Recollect.Util.row_to_map(columns, row) end)
         results = add_context_boost(results)
         bump_retrieval(results)
         track_for_outcome(scope_id, results)
@@ -197,7 +197,7 @@ defmodule Recollect.Search.Vector do
 
     case repo.query(sql, params) do
       {:ok, %{rows: rows, columns: columns}} ->
-        {:ok, Enum.map(rows, fn row -> row_to_map(columns, row) end)}
+        {:ok, Enum.map(rows, fn row -> Recollect.Util.row_to_map(columns, row) end)}
 
       {:error, reason} ->
         Logger.error("Recollect vector search (entities) failed: #{inspect(reason)}")
@@ -221,7 +221,7 @@ defmodule Recollect.Search.Vector do
     LIMIT $4
     """
 
-    {sql, [embedding_str, uuid_to_bin(owner_id), min_score, limit]}
+    {sql, [embedding_str, Recollect.Util.uuid_to_bin(owner_id), min_score, limit]}
   end
 
   # ── Query Builders (SQLite / sqlite-vec) ────────────────────────────
@@ -274,7 +274,7 @@ defmodule Recollect.Search.Vector do
     LIMIT $4
     """
 
-    params = [embedding_str, uuid_to_bin(scope_id), min_score, limit | filter_params]
+    params = [embedding_str, Recollect.Util.uuid_to_bin(scope_id), min_score, limit | filter_params]
     {sql, params}
   end
 
@@ -320,7 +320,7 @@ defmodule Recollect.Search.Vector do
     LIMIT $3
     """
 
-    {sql, [embedding_str, uuid_to_bin(owner_id), limit]}
+    {sql, [embedding_str, Recollect.Util.uuid_to_bin(owner_id), limit]}
   end
 
   defp entities_query(dialect, adapter, embedding_str, owner_id, limit) when dialect in [:sqlite, :libsql] do
@@ -445,16 +445,5 @@ defmodule Recollect.Search.Vector do
         [entry] |> ContextBooster.apply_boost(current) |> hd()
       end)
     end
-  end
-
-  defp uuid_to_bin(id) when is_binary(id) do
-    case Ecto.UUID.dump(id) do
-      {:ok, bin} -> bin
-      :error -> id
-    end
-  end
-
-  defp row_to_map(columns, row) do
-    columns |> Enum.zip(row) |> Map.new()
   end
 end

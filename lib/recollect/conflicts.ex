@@ -19,10 +19,10 @@ defmodule Recollect.Conflicts do
              WHERE scope_id = $1 AND status = 'open'
              ORDER BY score DESC
            """,
-           [uuid_to_bin(scope_id)]
+           [Recollect.Util.uuid_to_bin(scope_id)]
          ) do
       {:ok, %{rows: rows, columns: columns}} ->
-        {:ok, Enum.map(rows, fn row -> row_to_map(columns, row) end)}
+        {:ok, Enum.map(rows, fn row -> Recollect.Util.row_to_map(columns, row) end)}
 
       {:error, reason} ->
         {:error, reason}
@@ -45,7 +45,7 @@ defmodule Recollect.Conflicts do
         {:error, :not_found}
 
       {:ok, %{rows: [row], columns: columns}} ->
-        {:ok, row_to_map(columns, row)}
+        {:ok, Recollect.Util.row_to_map(columns, row)}
 
       {:error, reason} ->
         {:error, reason}
@@ -152,8 +152,8 @@ defmodule Recollect.Conflicts do
         """,
         [
           Ecto.UUID.generate(),
-          uuid_to_bin(scope_id),
-          uuid_to_bin(owner_id),
+          Recollect.Util.uuid_to_bin(scope_id),
+          Recollect.Util.uuid_to_bin(owner_id),
           a,
           b,
           reason,
@@ -178,24 +178,13 @@ defmodule Recollect.Conflicts do
              WHERE scope_id = $1
              ORDER BY detected_at DESC
            """,
-           [uuid_to_bin(scope_id)]
+           [Recollect.Util.uuid_to_bin(scope_id)]
          ) do
       {:ok, %{rows: rows, columns: columns}} ->
-        {:ok, Enum.map(rows, fn row -> row_to_map(columns, row) end)}
+        {:ok, Enum.map(rows, fn row -> Recollect.Util.row_to_map(columns, row) end)}
 
       {:error, reason} ->
         {:error, reason}
     end
-  end
-
-  defp uuid_to_bin(id) when is_binary(id) do
-    case Ecto.UUID.dump(id) do
-      {:ok, bin} -> bin
-      :error -> id
-    end
-  end
-
-  defp row_to_map(columns, row) do
-    columns |> Enum.zip(row) |> Map.new()
   end
 end

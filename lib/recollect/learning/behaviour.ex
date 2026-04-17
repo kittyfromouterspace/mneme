@@ -75,6 +75,17 @@ defmodule Recollect.Learner do
   """
   @callback detect_patterns([map()]) :: [map()]
 
+  @doc """
+  Summarize a batch of events into synthesized memory entries (optional).
+
+  Called after all individual events have been extracted. Allows learners
+  to produce higher-level insights (e.g., commit grouping, deprecation events).
+
+  ## Returns
+  - List of extract maps (same shape as extract/1 return value)
+  """
+  @callback summarize(events :: [map()], scope_id :: binary()) :: [map()]
+
   @type extract :: %{
           required(:content) => binary(),
           required(:entry_type) => atom(),
@@ -88,4 +99,9 @@ defmodule Recollect.Learner do
           required(:events) => [map()],
           required(:summary) => binary()
         }
+
+  @optional_callbacks [
+    detect_patterns: 1,
+    summarize: 2
+  ]
 end

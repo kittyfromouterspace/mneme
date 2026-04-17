@@ -40,12 +40,12 @@ defmodule Recollect.ConflictDetection do
 
   defp check_conflict(entry_a, entry_b) do
     stripped_overlap =
-      text_overlap(
+      Recollect.Util.text_overlap(
         strip_polarity(entry_a["content"]),
         strip_polarity(entry_b["content"])
       )
 
-    tag_overlap = jaccard(entry_a["tags"] || [], entry_b["tags"] || [])
+    tag_overlap = Recollect.Util.jaccard(entry_a["tags"] || [], entry_b["tags"] || [])
     overlap_score = max(stripped_overlap, tag_overlap * 0.75)
 
     if overlap_score < @conflict_threshold do
@@ -106,49 +106,6 @@ defmodule Recollect.ConflictDetection do
     |> String.trim()
   end
 
-  defp text_overlap(a, b) do
-    set_a = tokenize(a)
-    set_b = tokenize(b)
-    size_a = MapSet.size(set_a)
-    size_b = MapSet.size(set_b)
-
-    if size_a == 0 and size_b == 0 do
-      1.0
-    else
-      intersection = set_a |> MapSet.intersection(set_b) |> MapSet.size()
-      union = set_a |> MapSet.union(set_b) |> MapSet.size()
-
-      if union == 0 do
-        0.0
-      else
-        intersection / union
-      end
-    end
-  end
-
-  defp tokenize(text) do
-    text
-    |> String.replace(~r/[^\w\s]/, " ")
-    |> String.split()
-    |> Enum.filter(fn t -> String.length(t) > 1 end)
-    |> MapSet.new()
-  end
-
-  defp jaccard(list_a, list_b) do
-    set_a = MapSet.new(list_a)
-    set_b = MapSet.new(list_b)
-    size_a = MapSet.size(set_a)
-    size_b = MapSet.size(set_b)
-
-    if size_a == 0 and size_b == 0 do
-      0.0
-    else
-      intersection = set_a |> MapSet.intersection(set_b) |> MapSet.size()
-      union = set_a |> MapSet.union(set_b) |> MapSet.size()
-      intersection / union
-    end
-  end
-
   defp contains_any?(text, needles) do
     Enum.any?(needles, fn needle -> String.contains?(text, needle) end)
   end
@@ -165,7 +122,7 @@ defmodule Recollect.ConflictDetection do
          ) do
       {:ok, %{rows: rows, columns: columns}} ->
         Enum.map(rows, fn row ->
-          map = columns |> Enum.zip(row) |> Map.new()
+          map = Recollect.Util.row_to_map(columns, row)
 
           tags =
             case map["tags_json"] do

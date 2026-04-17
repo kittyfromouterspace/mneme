@@ -143,7 +143,7 @@ defmodule Recollect.Pipeline.Embedder do
       case adapter.dialect() do
         :postgres ->
           pgvec = if Code.ensure_loaded?(Pgvector), do: apply(Pgvector, :new, [embedding]), else: formatted
-          id_bin = uuid_to_binary(id)
+          id_bin = Recollect.Util.uuid_to_bin(id)
           {"UPDATE #{table} SET embedding = $1, embedding_model_id = $2 WHERE id = $3", [pgvec, model_id, id_bin]}
 
         _ ->
@@ -156,15 +156,6 @@ defmodule Recollect.Pipeline.Embedder do
 
       {:error, reason} ->
         Logger.warning("Recollect.Embedder: failed to store embedding for #{id}: #{inspect(reason)}")
-    end
-  end
-
-  defp uuid_to_binary(id) when is_binary(id) and byte_size(id) == 16, do: id
-
-  defp uuid_to_binary(id) when is_binary(id) do
-    case Ecto.UUID.dump(id) do
-      {:ok, bin} -> bin
-      :error -> id
     end
   end
 end

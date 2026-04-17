@@ -27,7 +27,12 @@ defmodule Recollect.Learner.CodingAgent.Gemini do
   def data_paths, do: default_data_paths()
 
   @impl true
-  def available?(config \\ %{}), do: Util.dir_exists?(hd(resolve_paths(config)))
+  def available?(config \\ %{}) do
+    case resolve_paths(config) do
+      [] -> false
+      [path | _] -> Util.dir_exists?(path)
+    end
+  end
 
   @impl true
   def fetch_events(config \\ %{}), do: fetch_events(config, [])
@@ -115,30 +120,9 @@ defmodule Recollect.Learner.CodingAgent.Gemini do
     end)
   end
 
-  defp file_newer_than?(_path, nil), do: true
+  defp file_newer_than?(path, since), do: Util.file_newer_than?(path, since)
 
-  defp file_newer_than?(path, since_str) when is_binary(since_str) do
-    case DateTime.from_iso8601(since_str) do
-      {:ok, dt, _} -> file_newer_than?(path, dt)
-      _ -> true
-    end
-  end
-
-  defp file_newer_than?(path, %DateTime{} = since_dt) do
-    case File.stat(path) do
-      {:ok, stat} ->
-        {{y, m, d}, {h, min, s}} = stat.mtime
-        {:ok, ndt} = NaiveDateTime.new(y, m, d, h, min, s)
-        file_dt = DateTime.from_naive!(ndt, "Etc/UTC")
-        DateTime.after?(file_dt, since_dt)
-
-      _ ->
-        true
-    end
-  end
-
-  defp resolve_paths(%{data_paths: [_ | _] = paths}), do: paths
-  defp resolve_paths(_), do: default_data_paths()
+  defp resolve_paths(config), do: Util.resolve_paths(config)
 
   defp parse_gemini_session(path) do
     with {:ok, content} <- File.read(path),

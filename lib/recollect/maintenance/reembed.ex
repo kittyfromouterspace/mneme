@@ -117,7 +117,7 @@ defmodule Recollect.Maintenance.Reembed do
     case adapter.dialect() do
       :postgres ->
         pgvec = if Code.ensure_loaded?(Pgvector), do: apply(Pgvector, :new, [embedding]), else: formatted
-        id_bin = uuid_to_binary(id)
+        id_bin = Recollect.Util.uuid_to_bin(id)
 
         repo.query(
           "UPDATE #{table} SET embedding = $1, embedding_model_id = $2 WHERE id = $3",
@@ -129,15 +129,6 @@ defmodule Recollect.Maintenance.Reembed do
           "UPDATE #{table} SET embedding = ?, embedding_model_id = ? WHERE id = ?",
           [formatted, model_id, id]
         )
-    end
-  end
-
-  defp uuid_to_binary(id) when is_binary(id) and byte_size(id) == 16, do: id
-
-  defp uuid_to_binary(id) when is_binary(id) do
-    case Ecto.UUID.dump(id) do
-      {:ok, bin} -> bin
-      :error -> id
     end
   end
 

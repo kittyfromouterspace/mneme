@@ -70,8 +70,4 @@ defmodule Recollect.Schema.Entry do
     |> validate_inclusion(:emotional_valence, ~w(neutral positive negative critical))
     |> validate_inclusion(:confidence_state, ~w(active stale verified))
   end
-
-  def bump_access_changeset(entry) do
-    change(entry, %{access_count: entry.access_count + 1, last_accessed_at: DateTime.utc_now()})
-  end
 end
