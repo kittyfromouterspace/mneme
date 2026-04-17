@@ -67,14 +67,14 @@ defmodule Recollect.WorkingMemory do
     case Recollect.Handoff.get(scope_id) do
       {:ok, handoff} when not is_nil(handoff) ->
         # Push handoff items to working memory
-        push(scope_id, "📋 #{handoff.what}", importance: 0.95)
+        push(scope_id, "Handoff: #{handoff.what}", importance: 0.95)
 
         Enum.each(handoff.next, fn step ->
-          push(scope_id, "→ #{step}", importance: 0.8)
+          push(scope_id, "Next: #{step}", importance: 0.8)
         end)
 
         Enum.each(handoff.artifacts, fn artifact ->
-          push(scope_id, "📎 #{artifact}", importance: 0.7)
+          push(scope_id, "Artifact: #{artifact}", importance: 0.7)
         end)
 
         Telemetry.event(

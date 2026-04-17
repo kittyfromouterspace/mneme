@@ -169,9 +169,8 @@ defmodule Recollect.Export do
   defp stream_results(%{rows: rows, columns: columns}, _batch_size) do
     # Convert each row to a map
     Enum.map(rows, fn row ->
-      columns
-      |> Enum.zip(row)
-      |> Map.new()
+      row
+      |> Recollect.Util.row_to_map(columns)
       |> transform_row()
     end)
   end

@@ -1,7 +1,11 @@
 # Recollect Cleanup — Implementation Plan
 
+> **Status: Completed** (2026-04-17)
+>
 > Post-refactor cleanup following the v0.5.0 consolidation of duplicate learners,
 > shared utilities, and orphan module integration.
+>
+> All 22 items across 4 phases have been executed. Final gate: `mix check` passes.
 
 ## Scope
 

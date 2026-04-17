@@ -63,8 +63,8 @@ defmodule Recollect.Outcome do
           UPDATE recollect_entries
           SET half_life_days = GREATEST(1, half_life_days + $1),
               outcome_score = $2,
-              updated_at = $3,
-              confidence_state = 'verified'
+              confidence_state = CASE WHEN $2 > 0 THEN 'verified' ELSE 'active' END,
+              updated_at = $3
           WHERE id = ANY($4)
         """,
         [delta, score, now, entry_ids]

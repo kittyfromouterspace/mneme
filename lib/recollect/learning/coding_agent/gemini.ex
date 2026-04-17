@@ -16,6 +16,8 @@ defmodule Recollect.Learner.CodingAgent.Gemini do
 
   @behaviour Recollect.Learner.CodingAgent.Provider
 
+  import Recollect.Learner.CodingAgent.Util, only: [resolve_paths: 1]
+
   alias Recollect.Learner.CodingAgent.Util
 
   @impl true
@@ -23,8 +25,6 @@ defmodule Recollect.Learner.CodingAgent.Gemini do
 
   @impl true
   def default_data_paths, do: ["~/.gemini"]
-
-  def data_paths, do: default_data_paths()
 
   @impl true
   def available?(config \\ %{}) do
@@ -121,8 +121,6 @@ defmodule Recollect.Learner.CodingAgent.Gemini do
   end
 
   defp file_newer_than?(path, since), do: Util.file_newer_than?(path, since)
-
-  defp resolve_paths(config), do: Util.resolve_paths(config)
 
   defp parse_gemini_session(path) do
     with {:ok, content} <- File.read(path),

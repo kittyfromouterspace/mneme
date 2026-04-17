@@ -40,36 +40,33 @@ defmodule Recollect.Invalidation do
     scope_id = Keyword.fetch!(opts, :scope_id)
     days = Keyword.get(opts, :days, 7)
 
-    start_time = System.monotonic_time()
-    Telemetry.event([:recollect, :invalidation, :start], %{scope_id: scope_id}, %{days: days})
+    {_, telemetry_meta} =
+      Telemetry.span([:recollect, :invalidation], %{scope_id: scope_id, days: days}, fn ->
+        migrations = detect_migrations(days)
 
-    migrations = detect_migrations(days)
+        results =
+          Enum.map(migrations, fn migration ->
+            weaken_related(scope_id, migration.from, migration.to)
+          end)
 
-    results =
-      Enum.map(migrations, fn migration ->
-        weaken_related(scope_id, migration.from, migration.to)
+        total_invalidated = Enum.sum(results)
+
+        {%{
+           migrations_detected: length(migrations),
+           invalidations: total_invalidated,
+           migrations: migrations
+         },
+         %{
+           migrations_detected: length(migrations),
+           invalidations: total_invalidated
+         }}
       end)
-
-    duration =
-      System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
-
-    total_invalidated = Enum.sum(results)
-
-    Telemetry.event(
-      [:recollect, :invalidation, :stop],
-      %{
-        duration_ms: duration,
-        migrations_detected: length(migrations),
-        invalidations: total_invalidated
-      },
-      %{scope_id: scope_id, days: days}
-    )
 
     {:ok,
      %{
-       migrations_detected: length(migrations),
-       invalidations: total_invalidated,
-       migrations: migrations
+       migrations_detected: telemetry_meta.migrations_detected,
+       invalidations: telemetry_meta.invalidations,
+       migrations: telemetry_meta[:migrations] || []
      }}
   end
 
@@ -86,37 +83,36 @@ defmodule Recollect.Invalidation do
     replacement = Keyword.get(opts, :replacement)
     weaken_factor = Keyword.get(opts, :weaken_factor, @default_weaken_factor)
 
-    start_time = System.monotonic_time()
+    {_, meta} =
+      Telemetry.span([:recollect, :invalidate], %{scope_id: scope_id, pattern: pattern, reason: reason}, fn ->
+        count = weaken_matching(scope_id, pattern, weaken_factor)
 
-    # Find and weaken matching entries
-    count = weaken_matching(scope_id, pattern, weaken_factor)
+        replacement_created =
+          if replacement do
+            case Knowledge.remember(replacement,
+                   scope_id: scope_id,
+                   entry_type: "note",
+                   metadata: %{supersedes: pattern, reason: reason},
+                   source: "system"
+                 ) do
+              {:ok, _} -> true
+              _ -> false
+            end
+          else
+            false
+          end
 
-    # Optionally create replacement entry
-    replacement_created =
-      if replacement do
-        case Knowledge.remember(replacement,
-               scope_id: scope_id,
-               entry_type: "note",
-               metadata: %{supersedes: pattern, reason: reason},
-               source: "system"
-             ) do
-          {:ok, _} -> true
-          _ -> false
-        end
-      else
-        false
-      end
+        {%{
+           invalidated: count,
+           replacement_created: replacement_created
+         },
+         %{
+           invalidated: count,
+           replacement_created: replacement_created
+         }}
+      end)
 
-    duration =
-      System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
-
-    Telemetry.event(
-      [:recollect, :invalidate, :stop],
-      %{duration_ms: duration, invalidated: count, replacement_created: replacement_created},
-      %{scope_id: scope_id, pattern: pattern, reason: reason}
-    )
-
-    {:ok, %{invalidated: count, replacement_created: replacement_created}}
+    {:ok, meta}
   end
 
   @doc """

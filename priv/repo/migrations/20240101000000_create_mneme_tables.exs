@@ -1,4 +1,11 @@
 defmodule Recollect.Repo.Migrations.CreateRecollectTables do
+  @moduledoc """
+  Legacy migration from the "mneme" era.
+
+  NOTE: For fresh installs, use `mix recollect.gen.migration` which delegates
+  to `Recollect.MigrationGenerator` and includes all current columns and tables.
+  This migration is kept for existing installations that already ran it.
+  """
   use Ecto.Migration
 
   def up do
@@ -56,9 +63,7 @@ defmodule Recollect.Repo.Migrations.CreateRecollectTables do
       add(:owner_id, :uuid, null: false)
       add(:scope_id, :uuid)
 
-      add(:document_id, references(:recollect_documents, type: :binary_id, on_delete: :delete_all),
-        null: false
-      )
+      add(:document_id, references(:recollect_documents, type: :binary_id, on_delete: :delete_all), null: false)
 
       add(:inserted_at, :utc_datetime_usec, null: false, default: fragment("now()"))
     end
@@ -113,13 +118,9 @@ defmodule Recollect.Repo.Migrations.CreateRecollectTables do
       add(:owner_id, :uuid, null: false)
       add(:scope_id, :uuid)
 
-      add(:from_entity_id, references(:recollect_entities, type: :binary_id, on_delete: :delete_all),
-        null: false
-      )
+      add(:from_entity_id, references(:recollect_entities, type: :binary_id, on_delete: :delete_all), null: false)
 
-      add(:to_entity_id, references(:recollect_entities, type: :binary_id, on_delete: :delete_all),
-        null: false
-      )
+      add(:to_entity_id, references(:recollect_entities, type: :binary_id, on_delete: :delete_all), null: false)
 
       add(:source_chunk_id, references(:recollect_chunks, type: :binary_id, on_delete: :nilify_all))
       timestamps(type: :utc_datetime_usec)
@@ -150,9 +151,7 @@ defmodule Recollect.Repo.Migrations.CreateRecollectTables do
       add(:owner_id, :uuid, null: false)
       add(:scope_id, :uuid)
 
-      add(:document_id, references(:recollect_documents, type: :binary_id, on_delete: :delete_all),
-        null: false
-      )
+      add(:document_id, references(:recollect_documents, type: :binary_id, on_delete: :delete_all), null: false)
 
       timestamps(type: :utc_datetime_usec)
     end
@@ -193,13 +192,9 @@ defmodule Recollect.Repo.Migrations.CreateRecollectTables do
       add(:weight, :float, default: 1.0)
       add(:metadata, :map, default: %{})
 
-      add(:source_entry_id, references(:recollect_entries, type: :binary_id, on_delete: :delete_all),
-        null: false
-      )
+      add(:source_entry_id, references(:recollect_entries, type: :binary_id, on_delete: :delete_all), null: false)
 
-      add(:target_entry_id, references(:recollect_entries, type: :binary_id, on_delete: :delete_all),
-        null: false
-      )
+      add(:target_entry_id, references(:recollect_entries, type: :binary_id, on_delete: :delete_all), null: false)
 
       timestamps(type: :utc_datetime_usec)
     end

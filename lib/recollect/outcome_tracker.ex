@@ -31,7 +31,7 @@ defmodule Recollect.OutcomeTracker do
     end
   end
 
-  @doc "Clear the last-retrieved entries for a scope."
+  @doc false
   def clear(scope_id) do
     :ets.delete(@table, scope_id)
   end

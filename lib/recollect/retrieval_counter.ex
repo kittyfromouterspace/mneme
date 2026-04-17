@@ -32,7 +32,7 @@ defmodule Recollect.RetrievalCounter do
     for id <- entry_ids, do: bump(id)
   end
 
-  @doc "Get current count for an entry (for debugging)."
+  @doc false
   def count(entry_id) do
     case :ets.lookup(@table, entry_id) do
       [{^entry_id, count}] -> count

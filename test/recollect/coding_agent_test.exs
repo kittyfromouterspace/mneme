@@ -40,7 +40,7 @@ defmodule Recollect.CodingAgentTest do
     test "all providers implement required callbacks" do
       for provider <- CodingAgent.providers() do
         assert function_exported?(provider, :agent_name, 0)
-        assert function_exported?(provider, :data_paths, 0)
+        assert function_exported?(provider, :default_data_paths, 0)
         assert function_exported?(provider, :available?, 0)
         assert function_exported?(provider, :fetch_events, 0)
         assert function_exported?(provider, :extract, 1)
@@ -55,7 +55,7 @@ defmodule Recollect.CodingAgentTest do
 
     test "all providers return non-empty data paths" do
       for provider <- CodingAgent.providers() do
-        paths = provider.data_paths()
+        paths = provider.default_data_paths()
         assert is_list(paths)
         assert length(paths) > 0
       end

@@ -96,6 +96,25 @@ defmodule Recollect.Pipeline.Embedder do
             {:ok, embedding} ->
               store_embedding(Config.repo(), "recollect_entries", entry_id, embedding, model_id)
 
+              try do
+                repo = Config.repo()
+
+                entry =
+                  "SELECT id, content, entry_type, tags, emotional_valence FROM recollect_entries WHERE id = $1"
+                  |> repo.query([Recollect.Util.uuid_to_bin(entry_id)])
+                  |> case do
+                    {:ok, %{rows: [[id, content, entry_type, tags, valence]], columns: _cols}} ->
+                      %{id: id, content: content, entry_type: entry_type, tags: tags, emotional_valence: valence}
+
+                    _ ->
+                      nil
+                  end
+
+                if entry, do: Recollect.Mipmap.persist_async(entry)
+              rescue
+                _ -> :ok
+              end
+
             {:error, reason} ->
               Logger.warning("Recollect.Embedder: entry embedding failed for #{entry_id}: #{inspect(reason)}")
           end

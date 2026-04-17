@@ -52,10 +52,6 @@ Multi-pass consolidation cycle: decay -> merge overlapping -> detect conflicts
 Returns `%{decayed: n, removed: n, merged: n, semantic_created: n,
 conflicts_detected: n, duration_ms: n}`.
 
-### `Recollect.Consolidation.dry_run/1`
-
-Preview consolidation without persisting changes.
-
 ## Invalidation
 
 ### `Recollect.Invalidation.run_from_git/1`
@@ -89,7 +85,7 @@ Manually weaken memories matching a pattern.
 ### `Recollect.Outcome.good/1` and `Recollect.Outcome.bad/1`
 
 Signal whether the last-retrieved entries were helpful. Adjusts `half_life_days`
-and sets `confidence_state` to `"verified"`.
+and updates `confidence_state` (`"verified"` for good outcomes, `"active"` for bad).
 
 ```elixir
 Recollect.Outcome.good(scope_id)   # +5 days to half_life

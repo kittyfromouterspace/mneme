@@ -158,7 +158,6 @@ defmodule Recollect.Learning.Pipeline do
                 end
               end
             end)
-            |> then(fn {l, s} -> {l, s} end)
           else
             {[], []}
           end

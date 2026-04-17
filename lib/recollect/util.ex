@@ -26,10 +26,7 @@ defmodule Recollect.Util do
     if MapSet.size(set_a) == 0 and MapSet.size(set_b) == 0 do
       1.0
     else
-      intersection = MapSet.size(MapSet.intersection(set_a, set_b))
-      union = MapSet.size(MapSet.union(set_a, set_b))
-
-      if union == 0, do: 0.0, else: intersection / union
+      jaccard(set_a, set_b)
     end
   end
 

@@ -4,7 +4,9 @@
 
 - `mix test` — runs `ecto.create` → `ecto.migrate` → tests. A running PostgreSQL instance with pgvector extension is required.
 - `mix format` — code formatter; run before committing.
-- `mix recollect.gen.migration --dimensions N` — generate the database migration. You must run `mix ecto.migrate` afterward to apply it.
+- `mix check` — runs `format --check-formatted` → `test`. Use as the final quality gate before releases.
+  **Note:** Run as `MIX_ENV=test mix check` to ensure test support modules are compiled.
+- `mix recollect.gen.migration --dimensions N` — generate the database migration via `Recollect.MigrationGenerator`. You must run `mix ecto.migrate` afterward to apply it.
 
 ## Architecture
 
@@ -32,7 +34,7 @@ This library is consumed as a git dependency by Worth and published to [Hex.pm](
 ### Release SOP
 
 1. **Bump `@version`** in `mix.exs` (line 4). This also updates `source_ref` in the docs config (line 85).
-2. **Run checks**: `mix format`, `mix test`, `mix docs` — verify everything passes.
+2. **Run checks**: `mix check` — runs format, test, and docs. Verify everything passes.
 3. **Commit** the version bump with message `v{VERSION}`.
 4. **Tag** the commit: `git tag v{VERSION}`. The tag name must match `mix.exs` exactly (prefixed with `v`).
 5. **Push**: `git push origin main --tags`.

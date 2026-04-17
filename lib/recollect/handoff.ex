@@ -39,39 +39,37 @@ defmodule Recollect.Handoff do
     blockers = Keyword.get(opts, :blockers, [])
     session_id = Keyword.get(opts, :session_id)
 
-    start_time = System.monotonic_time()
-
     repo = Config.repo()
     now = DateTime.utc_now()
 
-    result =
-      repo.query(
-        """
-          INSERT INTO recollect_handoffs
-            (id, scope_id, session_id, what, next, artifacts, blockers, created_at, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        """,
-        [
-          Ecto.UUID.generate(),
-          Recollect.Util.uuid_to_bin(scope_id),
-          session_id && Recollect.Util.uuid_to_bin(session_id),
-          what,
-          Jason.encode!(next),
-          Jason.encode!(artifacts),
-          Jason.encode!(blockers),
-          now,
-          now
-        ]
+    {result, _} =
+      Telemetry.span(
+        [:recollect, :handoff, :create],
+        %{scope_id: scope_id, next_count: length(next), artifacts_count: length(artifacts)},
+        fn ->
+          result =
+            repo.query(
+              """
+                INSERT INTO recollect_handoffs
+                  (id, scope_id, session_id, what, next, artifacts, blockers, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+              """,
+              [
+                Ecto.UUID.generate(),
+                Recollect.Util.uuid_to_bin(scope_id),
+                session_id && Recollect.Util.uuid_to_bin(session_id),
+                what,
+                Jason.encode!(next),
+                Jason.encode!(artifacts),
+                Jason.encode!(blockers),
+                now,
+                now
+              ]
+            )
+
+          {%{result: result}, result}
+        end
       )
-
-    duration =
-      System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
-
-    Telemetry.event(
-      [:recollect, :handoff, :create, :stop],
-      %{duration_ms: duration},
-      %{scope_id: scope_id, next_count: length(next), artifacts_count: length(artifacts)}
-    )
 
     result
   end
@@ -80,62 +78,47 @@ defmodule Recollect.Handoff do
   Get the most recent handoff for a scope.
   """
   def get(scope_id) do
-    start_time = System.monotonic_time()
-
     repo = Config.repo()
 
-    case repo.query(
-           """
-             SELECT id, what, next, artifacts, blockers, session_id, created_at
-             FROM recollect_handoffs
-             WHERE scope_id = $1
-             ORDER BY created_at DESC
-             LIMIT 1
-           """,
-           [Recollect.Util.uuid_to_bin(scope_id)]
-         ) do
-      {:ok,
-       %{
-         rows: [
-           [id, what, next_json, artifacts_json, blockers_json, session_id, created_at] | []
-         ]
-       }} ->
-        handoff = %{
-          id: id,
-          what: what,
-          next: decode_json_or_list(next_json, []),
-          artifacts: decode_json_or_list(artifacts_json, []),
-          blockers: decode_json_or_list(blockers_json, []),
-          session_id: session_id,
-          created_at: created_at
-        }
+    {result, _} =
+      Telemetry.span([:recollect, :handoff, :get], %{scope_id: scope_id}, fn ->
+        case repo.query(
+               """
+                 SELECT id, what, next, artifacts, blockers, session_id, created_at
+                 FROM recollect_handoffs
+                 WHERE scope_id = $1
+                 ORDER BY created_at DESC
+                 LIMIT 1
+               """,
+               [Recollect.Util.uuid_to_bin(scope_id)]
+             ) do
+          {:ok,
+           %{
+             rows: [
+               [id, what, next_json, artifacts_json, blockers_json, session_id, created_at] | []
+             ]
+           }} ->
+            handoff = %{
+              id: id,
+              what: what,
+              next: decode_json_or_list(next_json, []),
+              artifacts: decode_json_or_list(artifacts_json, []),
+              blockers: decode_json_or_list(blockers_json, []),
+              session_id: session_id,
+              created_at: created_at
+            }
 
-        duration =
-          System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
+            {%{result: {:ok, handoff}, found: true}, {:ok, handoff}}
 
-        Telemetry.event(
-          [:recollect, :handoff, :get, :stop],
-          %{duration_ms: duration, found: true},
-          %{scope_id: scope_id}
-        )
+          {:ok, %{rows: []}} ->
+            {%{result: {:ok, nil}, found: false}, {:ok, nil}}
 
-        {:ok, handoff}
+          {:error, reason} ->
+            {%{result: {:error, reason}}, {:error, reason}}
+        end
+      end)
 
-      {:ok, %{rows: []}} ->
-        duration =
-          System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
-
-        Telemetry.event(
-          [:recollect, :handoff, :get, :stop],
-          %{duration_ms: duration, found: false},
-          %{scope_id: scope_id}
-        )
-
-        {:ok, nil}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+    result
   end
 
   @doc """

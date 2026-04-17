@@ -54,52 +54,55 @@ defmodule Recollect.Consolidation do
 
     start_time = System.monotonic_time()
 
-    repo = Config.repo()
-    owner_id = fetch_owner_id(scope_id, repo)
+    {result, _} =
+      Telemetry.span([:recollect, :consolidation], %{scope_id: scope_id}, fn ->
+        repo = Config.repo()
+        owner_id = fetch_owner_id(scope_id, repo)
 
-    entries = fetch_entries(scope_id, repo)
+        entries = fetch_entries(scope_id, repo)
 
-    decay_result = decay_pass(entries, decay_threshold)
-    survivors = decay_result.survivors
+        decay_result = decay_pass(entries, decay_threshold)
+        survivors = decay_result.survivors
 
-    merge_result = merge_pass(survivors, merge_threshold, min_cluster, repo, scope_id)
+        merge_result = merge_pass(survivors, merge_threshold, min_cluster, repo, scope_id)
 
-    conflicts = ConflictDetection.detect(scope_id)
+        conflicts = ConflictDetection.detect(scope_id)
 
-    SchemaIndex.rebuild()
+        SchemaIndex.rebuild()
 
-    duration_ms =
-      System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
+        duration_ms =
+          System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
 
-    if !dry_run do
-      persist_consolidation_run(
-        scope_id,
-        owner_id,
-        %{
+        if !dry_run do
+          persist_consolidation_run(
+            scope_id,
+            owner_id,
+            %{
+              decayed: decay_result.count,
+              removed: length(decay_result.removed),
+              merged: merge_result.merged,
+              semantic_created: merge_result.semantic_created,
+              conflicts_detected: length(conflicts)
+            },
+            duration_ms
+          )
+
+          persist_conflicts(scope_id, owner_id, conflicts)
+
+          create_summary_entries(merge_result.summaries, scope_id, owner_id, repo)
+        end
+
+        result = %{
           decayed: decay_result.count,
           removed: length(decay_result.removed),
           merged: merge_result.merged,
           semantic_created: merge_result.semantic_created,
-          conflicts_detected: length(conflicts)
-        },
-        duration_ms
-      )
+          conflicts_detected: length(conflicts),
+          duration_ms: duration_ms
+        }
 
-      persist_conflicts(scope_id, owner_id, conflicts)
-
-      create_summary_entries(merge_result.summaries, scope_id, owner_id, repo)
-    end
-
-    result = %{
-      decayed: decay_result.count,
-      removed: length(decay_result.removed),
-      merged: merge_result.merged,
-      semantic_created: merge_result.semantic_created,
-      conflicts_detected: length(conflicts),
-      duration_ms: duration_ms
-    }
-
-    Telemetry.event([:recollect, :consolidation, :stop], result)
+        {%{result: result}, result}
+      end)
 
     {:ok, result}
   end

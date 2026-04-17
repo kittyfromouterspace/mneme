@@ -18,6 +18,13 @@ defmodule Recollect.Search.Vector do
 
   require Logger
 
+  defp embedding_to_str(embedding) when is_list(embedding) do
+    adapter = Config.adapter()
+    result = adapter.format_embedding(embedding)
+
+    if is_binary(result), do: result, else: "[#{Enum.map_join(embedding, ",", &Float.to_string/1)}]"
+  end
+
   @doc """
   Search for similar chunks and/or entries.
 
@@ -43,12 +50,13 @@ defmodule Recollect.Search.Vector do
     result =
       case Embedder.embed_query(query_text) do
         {:ok, query_embedding} ->
-          embedding_str = "[#{Enum.map_join(query_embedding, ",", &Float.to_string/1)}]"
+          embedding_str = embedding_to_str(query_embedding)
 
           results =
             []
             |> maybe_search_chunks(embedding_str, opts, limit, min_score, tier)
             |> maybe_search_entries(embedding_str, opts, limit, min_score, tier, filters)
+            |> maybe_escalate_to_mipmaps(query_text, opts, limit)
 
           {:ok, results}
 
@@ -84,7 +92,7 @@ defmodule Recollect.Search.Vector do
 
     case Embedder.embed_query(query_text) do
       {:ok, embedding} ->
-        embedding_str = "[#{Enum.map_join(embedding, ",", &Float.to_string/1)}]"
+        embedding_str = embedding_to_str(embedding)
         do_search_chunks(embedding_str, owner_id, limit, min_score)
 
       {:error, reason} ->
@@ -100,7 +108,7 @@ defmodule Recollect.Search.Vector do
 
     case Embedder.embed_query(query_text) do
       {:ok, embedding} ->
-        embedding_str = "[#{Enum.map_join(embedding, ",", &Float.to_string/1)}]"
+        embedding_str = embedding_to_str(embedding)
         do_search_entries(embedding_str, scope_id, limit, min_score, filters)
 
       {:error, reason} ->
@@ -114,7 +122,7 @@ defmodule Recollect.Search.Vector do
 
     case Embedder.embed_query(query_text) do
       {:ok, embedding} ->
-        embedding_str = "[#{Enum.map_join(embedding, ",", &Float.to_string/1)}]"
+        embedding_str = embedding_to_str(embedding)
         do_search_entities(embedding_str, owner_id, limit)
 
       {:error, reason} ->
@@ -138,6 +146,31 @@ defmodule Recollect.Search.Vector do
   end
 
   defp maybe_search_chunks(acc, _, _, _, _, _), do: acc
+
+  defp maybe_escalate_to_mipmaps(results, query_text, opts, limit) when length(results) < 3 do
+    case Keyword.get(opts, :scope_id) do
+      nil ->
+        results
+
+      scope_id ->
+        case Recollect.Mipmap.retrieve(query_text, scope_id, limit: limit) do
+          {:ok, mipmap_results, _level} when mipmap_results != [] ->
+            existing_ids = MapSet.new(results, fn r -> r["entry_id"] end)
+
+            mipmap_entries =
+              mipmap_results
+              |> Enum.reject(fn m -> MapSet.member?(existing_ids, m["entry_id"]) end)
+              |> Enum.map(&Map.put(&1, :result_type, :mipmap))
+
+            results ++ mipmap_entries
+
+          _ ->
+            results
+        end
+    end
+  end
+
+  defp maybe_escalate_to_mipmaps(results, _, _, _), do: results
 
   defp maybe_search_entries(acc, embedding_str, opts, limit, min_score, tier, filters)
        when tier in [:lightweight, :both] do

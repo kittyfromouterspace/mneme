@@ -77,21 +77,15 @@ defmodule Recollect.Classification do
       {:emotional, 0.6}
   """
   def classify(text) when is_binary(text) do
-    start_time = System.monotonic_time()
-
     result =
       text
       |> extract_prose()
       |> score_types()
       |> determine_type()
 
-    duration = System.monotonic_time() - start_time
-
-    Recollect.Telemetry.event([:recollect, :classification, :stop], %{
-      duration: duration,
-      type: elem(result, 0),
-      confidence: elem(result, 1)
-    })
+    Recollect.Telemetry.span([:recollect, :classification], %{type: elem(result, 0)}, fn ->
+      %{result: result}
+    end)
 
     result
   end
@@ -137,9 +131,7 @@ defmodule Recollect.Classification do
   """
   def memory_type(text), do: elem(classify(text), 0)
 
-  @doc """
-  Returns all supported memory types.
-  """
+  @doc false
   def types, do: @memory_types
 
   # ============================================================================

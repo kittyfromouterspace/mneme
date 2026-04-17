@@ -50,6 +50,11 @@ defmodule Recollect.Maintenance.Reembed do
       end)
 
     Logger.info("Recollect.Reembed: re-embedded #{total} records")
+
+    if Keyword.get(opts, :regenerate_mipmaps, false) and "recollect_entries" in tables do
+      regenerate_mipmaps(repo)
+    end
+
     {:ok, total}
   end
 
@@ -136,6 +141,32 @@ defmodule Recollect.Maintenance.Reembed do
     case EmbeddingProvider.embed(content) do
       {:ok, embedding} -> {:ok, embedding, EmbeddingProvider.model_id()}
       other -> other
+    end
+  end
+
+  defp regenerate_mipmaps(repo) do
+    case repo.query(
+           "SELECT id, content, entry_type, tags, emotional_valence FROM recollect_entries WHERE embedding IS NOT NULL LIMIT 500",
+           []
+         ) do
+      {:ok, %{rows: rows}} ->
+        entries =
+          Enum.map(rows, fn [id, content, entry_type, tags, valence] ->
+            %{id: id, content: content, entry_type: entry_type, tags: tags, emotional_valence: valence}
+          end)
+
+        Enum.each(entries, fn entry ->
+          try do
+            Recollect.Mipmap.persist(entry)
+          rescue
+            _ -> :ok
+          end
+        end)
+
+        Logger.info("Recollect.Reembed: regenerated mipmaps for #{length(entries)} entries")
+
+      _ ->
+        :ok
     end
   end
 end

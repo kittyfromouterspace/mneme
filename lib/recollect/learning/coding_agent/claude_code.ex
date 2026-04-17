@@ -19,6 +19,8 @@ defmodule Recollect.Learner.CodingAgent.ClaudeCode do
 
   @behaviour Recollect.Learner.CodingAgent.Provider
 
+  import Recollect.Learner.CodingAgent.Util, only: [resolve_paths: 1]
+
   alias Recollect.Learner.CodingAgent.Util
 
   @memory_type_map %{
@@ -47,8 +49,6 @@ defmodule Recollect.Learner.CodingAgent.ClaudeCode do
 
   @impl true
   def default_data_paths, do: ["~/.claude/projects"]
-
-  def data_paths, do: default_data_paths()
 
   @impl true
   def available?(config \\ %{}) do
@@ -281,8 +281,6 @@ defmodule Recollect.Learner.CodingAgent.ClaudeCode do
   end
 
   defp file_newer_than?(path, since), do: Util.file_newer_than?(path, since)
-
-  defp resolve_paths(config), do: Util.resolve_paths(config)
 
   defp file_mtime(path) do
     case File.stat(path) do

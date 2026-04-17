@@ -17,6 +17,8 @@ defmodule Recollect.Learner.CodingAgent.OpenCode do
 
   @behaviour Recollect.Learner.CodingAgent.Provider
 
+  import Recollect.Learner.CodingAgent.Util, only: [resolve_paths: 1]
+
   alias Recollect.Learner.CodingAgent.Util
 
   @impl true
@@ -24,8 +26,6 @@ defmodule Recollect.Learner.CodingAgent.OpenCode do
 
   @impl true
   def default_data_paths, do: ["~/.local/share/opencode"]
-
-  def data_paths, do: default_data_paths()
 
   @impl true
   def available?(config \\ %{}) do
@@ -137,8 +137,6 @@ defmodule Recollect.Learner.CodingAgent.OpenCode do
         []
     end
   end
-
-  defp resolve_paths(config), do: Util.resolve_paths(config)
 
   defp parse_session_row(%{"id" => id, "title" => title, "directory" => directory, "path" => project_path}) do
     project =
