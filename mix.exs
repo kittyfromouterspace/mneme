@@ -1,7 +1,7 @@
 defmodule Recollect.MixProject do
   use Mix.Project
 
-  @version "0.4.5"
+  @version "0.5.0"
 
   def project do
     [
@@ -74,7 +74,7 @@ defmodule Recollect.MixProject do
       links: %{
         "GitHub" => "https://github.com/kittyfromouterspace/recollect"
       },
-      files: ~w(lib priv .formatter.exs mix.exs)
+      files: ~w(lib priv .formatter.exs mix.exs usage-rules.md usage-rules)
     ]
   end
 

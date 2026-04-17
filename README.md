@@ -1,6 +1,6 @@
 # Recollect
 
-Pluggable memory engine for Elixir applications. Provides document ingestion with markdown-aware chunking, configurable vector embeddings (pgvector), LLM-powered entity/relation extraction, knowledge graph storage, hybrid search, and memory decay.
+Pluggable memory engine for Elixir applications. Provides document ingestion with markdown-aware chunking, configurable vector embeddings, LLM-powered entity/relation extraction, knowledge graph storage, hybrid search, working memory, session handoff, and memory lifecycle management (decay, consolidation, invalidation).
 
 ## Inspiration
 
@@ -8,28 +8,35 @@ Recollect builds on research from [MemPalace](https://github.com/milla-jovovich/
 
 ## Architecture
 
-Recollect provides two independent tiers that can be used separately or together:
+Recollect provides three tiers that can be used independently or together:
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│ Tier 1: Full Pipeline                                           │
-│                                                                 │
-│ Collection → Document → Chunk → Entity → Relation               │
-│                                                                 │
-│ Markdown-aware chunking, content-hash dedup, LLM entity         │
-│ extraction, pipeline tracking, PostgreSQL graph traversal       │
-├─────────────────────────────────────────────────────────────────┤
-│ Tier 2: Lightweight Knowledge                                   │
-│                                                                 │
-│ Entry + Edge                                                    │
-│                                                                 │
-│ Simple store-embed-search with access tracking, confidence      │
-│ scoring, supersession, and decay                                │
-├─────────────────────────────────────────────────────────────────┤
-│ Shared: Search (Vector + Graph + Hybrid), Context Formatting    │
-│ Shared: Configurable Embedding (OpenRouter, OpenAI, Ollama)     │
-│ Shared: Maintenance (Decay, Reembed)                            │
-└─────────────────────────────────────────────────────────────────┘
++------------------------------------------------------------------+
+| Tier 0: Working Memory                                            |
+|                                                                  |
+| Session-scoped bounded buffer. No embeddings.                     |
+| Importance-based eviction. Integrates with Handoff for session    |
+| continuity.                                                       |
++------------------------------------------------------------------+
+| Tier 1: Full Pipeline                                            |
+|                                                                  |
+| Collection -> Document -> Chunk -> Entity -> Relation             |
+|                                                                  |
+| Markdown-aware chunking, content-hash dedup, LLM entity          |
+| extraction, pipeline tracking, graph traversal                   |
++------------------------------------------------------------------+
+| Tier 2: Lightweight Knowledge                                     |
+|                                                                  |
+| Entry + Edge                                                      |
+|                                                                  |
+| Simple store-embed-search with access tracking, confidence       |
+| scoring, supersession, and decay                                 |
++------------------------------------------------------------------+
+| Shared: Search (Vector + Graph + Hybrid), Context Formatting     |
+| Shared: Configurable Embedding (Local, OpenRouter)               |
+| Shared: Maintenance (Decay, Reembed, Consolidation, Invalidation)|
+| Shared: Telemetry, Export/Import, Learning                        |
++------------------------------------------------------------------+
 ```
 
 ## Integration Guide
@@ -52,15 +59,14 @@ Run `mix deps.get`.
 ### Step 2: Generate Migration
 
 ```bash
-mix recollect.gen.migration --dimensions 768
+mix recollect.gen.migration --dimensions 384
 ```
 
 Options:
 
-- `--dimensions` — Embedding vector dimensions (default: 768). Must match your embedding model:
-  - `768` for Google text-embedding-004, Ollama nomic-embed-text
-  - `1536` for OpenAI text-embedding-3-small
-  - `3072` for OpenAI text-embedding-3-large
+- `--dimensions` — Embedding vector dimensions (default: 384). Must match your embedding model:
+  - `384` for Local (all-MiniLM-L6-v2, default)
+  - `1536` for OpenRouter with OpenAI text-embedding-3-small
 
 This creates a migration in `priv/repo/migrations/` with all Recollect tables. Then:
 
@@ -83,8 +89,8 @@ config :recollect,
       # Return :disabled if no credentials available
       %{
         api_key: System.get_env("OPENROUTER_API_KEY"),
-        model: "google/text-embedding-004",
-        dimensions: 768
+        model: "openai/text-embedding-3-small",
+        dimensions: 1536
       }
     end
   ],
@@ -98,24 +104,40 @@ config :recollect,
   ]
 ```
 
+If no embedding provider is configured, Recollect uses `Recollect.Embedding.Local` (Bumblebee) by default, which requires no API keys and runs entirely on-device.
+
+#### Database Adapters
+
+Recollect supports multiple database backends via the `:database_adapter` config:
+
+```elixir
+# PostgreSQL with pgvector (default)
+config :recollect, :database_adapter, Recollect.DatabaseAdapter.Postgres
+
+# SQLite3 with sqlite-vec
+config :recollect, :database_adapter, Recollect.DatabaseAdapter.SQLiteVec
+
+# libSQL (SQLite with native vector support)
+config :recollect, :database_adapter, Recollect.DatabaseAdapter.LibSQL
+```
+
 #### Credential Resolution
 
-Recollect never stores API keys. Instead, you provide a `:credentials_fn` that fetches
-credentials from your app's secret system at runtime. Examples:
+Recollect never stores API keys. Instead, you provide a `:credentials_fn` that fetches credentials from your app's secret system at runtime. Examples:
 
 ```elixir
 # Simple: environment variable
 credentials_fn: fn ->
   case System.get_env("OPENROUTER_API_KEY") do
     nil -> :disabled
-    key -> %{api_key: key, model: "google/text-embedding-004", dimensions: 768}
+    key -> %{api_key: key, model: "openai/text-embedding-3-small", dimensions: 1536}
   end
 end
 
 # Phoenix app with encrypted DB secrets
 credentials_fn: fn ->
   case MyApp.Secrets.get_api_key("openrouter") do
-    {:ok, key} -> %{api_key: key, model: "google/text-embedding-004", dimensions: 768}
+    {:ok, key} -> %{api_key: key, model: "openai/text-embedding-3-small", dimensions: 1536}
     _ -> :disabled
   end
 end
@@ -123,7 +145,7 @@ end
 # Ash-based credential store
 credentials_fn: fn ->
   case MyApp.Admin.LlmCredential.active_for_provider(:openrouter, authorize?: false) do
-    {:ok, cred} -> %{api_key: cred.api_key, model: "google/text-embedding-004", dimensions: 768}
+    {:ok, cred} -> %{api_key: cred.api_key, model: "openai/text-embedding-3-small", dimensions: 1536}
     _ -> :disabled
   end
 end
@@ -131,39 +153,59 @@ end
 
 ### Step 4: Use
 
-#### Tier 2 — Lightweight Knowledge (simplest)
+#### Tier 0 — Working Memory (session-scoped)
+
+A bounded buffer for current-session notes. No embeddings, no persistence. Integrates with Handoff for session continuity.
+
+```elixir
+# Push notes into working memory
+Recollect.WorkingMemory.push(scope_id, "User prefers dark mode",
+  importance: 0.9
+)
+
+# Read all notes for a scope (sorted by importance DESC)
+{:ok, notes} = Recollect.WorkingMemory.read(scope_id)
+
+# Load previous session's handoff into working memory
+Recollect.WorkingMemory.load_handoff(scope_id)
+
+# Clear at end of session
+Recollect.WorkingMemory.flush(scope_id)
+```
+
+#### Tier 2 — Lightweight Knowledge (simplest persistent)
 
 Store and search knowledge entries:
 
 ```elixir
 # Store a fact (auto-embeds in background)
-{:ok, entry} = Recollect.remember("Deploy script is at scripts/deploy.sh",
+{:ok, entry} = Recollect.Knowledge.remember("Deploy script is at scripts/deploy.sh",
   scope_id: workspace_id,
   owner_id: user_id,
   entry_type: "note"
 )
 
 # Search by semantic similarity
-{:ok, results} = Recollect.search("how to deploy",
+{:ok, results} = Recollect.Search.search("how to deploy",
   scope_id: workspace_id,
   tier: :lightweight
 )
 
 # Format results for LLM system prompt
-context_text = Recollect.build_context(results)
+context_text = Recollect.Search.ContextFormatter.format(results)
 
 # Connect related entries
-Recollect.connect(entry1.id, entry2.id, "supports", weight: 0.8)
+Recollect.Knowledge.connect(entry1.id, entry2.id, "supports", weight: 0.8)
 
 # Delete
-Recollect.forget(entry.id)
+Recollect.Knowledge.forget(entry.id)
 ```
 
 Entry types: `outcome`, `event`, `decision`, `observation`, `hypothesis`, `note`, `session_summary`, `conversation_turn`, `preference`, `milestone`, `problem`, `emotional`, `archived`.
 
 ```elixir
 # Auto-classify content using LLM-free pattern matching (inspired by MemPalace)
-{:ok, entry} = Recollect.remember("We decided to use PostgreSQL for its JSON support",
+{:ok, entry} = Recollect.Knowledge.remember("We decided to use PostgreSQL for its JSON support",
   scope_id: workspace_id,
   owner_id: user_id,
   auto_classify: true  # Detects :decision type automatically
@@ -182,23 +224,23 @@ Ingest documents with chunking, embedding, and entity extraction:
 
 ```elixir
 # Ingest a document (deduplicates by content hash)
-{:ok, doc} = Recollect.ingest("Meeting Notes", markdown_content,
+{:ok, doc} = Recollect.Pipeline.Ingester.ingest("Meeting Notes", markdown_content,
   owner_id: user_id,
   scope_id: workspace_id,
   source_type: "artifact",
   source_id: "meeting-2024-01-15"
 )
 
-# Run the full pipeline: chunk → embed → extract entities → embed entities
-{:ok, run} = Recollect.process(doc)
+# Run the full pipeline: chunk -> embed -> extract entities -> embed entities
+{:ok, run} = Recollect.Pipeline.process(doc)
 # run.status => "complete"
 # run.step_details => %{chunks_created: 12, entities_extracted: 8, ...}
 
 # Or run async (fire and forget)
-Recollect.process_async(doc)
+Recollect.Pipeline.process_async(doc)
 
 # Re-ingesting unchanged content returns :unchanged (no wasted API calls)
-{:ok, :unchanged} = Recollect.ingest("Meeting Notes", markdown_content,
+{:ok, :unchanged} = Recollect.Pipeline.Ingester.ingest("Meeting Notes", markdown_content,
   owner_id: user_id, scope_id: workspace_id,
   source_type: "artifact", source_id: "meeting-2024-01-15"
 )
@@ -208,11 +250,11 @@ Recollect.process_async(doc)
 
 ```elixir
 # Search across chunks AND entries
-{:ok, context_pack} = Recollect.search("project timeline",
+{:ok, context_pack} = Recollect.Search.search("project timeline",
   owner_id: user_id,
   scope_id: workspace_id,
   limit: 10,
-  hops: 2  # graph expansion depth
+  hops: 1  # graph expansion depth (default: 1)
 )
 
 # context_pack contains:
@@ -226,10 +268,10 @@ Recollect.process_async(doc)
 # }
 
 # Format for LLM consumption
-context_text = Recollect.build_context(context_pack)
+context_text = Recollect.Search.ContextFormatter.format(context_pack)
 
 # Search with filters (inspired by MemPalace's wing/room filtering)
-{:ok, results} = Recollect.search("deployment",
+{:ok, results} = Recollect.Search.search("deployment",
   scope_id: workspace_id,
   tier: :lightweight,
   filters: %{
@@ -238,44 +280,104 @@ context_text = Recollect.build_context(context_pack)
     confidence_min: 0.5         # Minimum confidence
   }
 )
-# =>
-# ## Relevant Memory Chunks
-# [Chunk 1 (score: 0.892)] The project timeline was revised...
-#
-# ## Relevant Knowledge
-# [1] [decision] (score: 0.845) Moved deadline to March
-#
-# ## Known Entities
-# - project timeline (concept): Schedule for deliverables
-# - march deadline (event): Revised target date
-#
-# ## Known Relationships
-# - project timeline --[depends_on]--> march deadline
+```
+
+#### LLM-Augmented Completion
+
+Combine search with LLM reasoning for question-answering over memory:
+
+```elixir
+{:ok, result} = Recollect.Search.Completion.complete(
+  "What was decided about auth?",
+  owner_id: user_id,
+  scope_id: workspace_id,
+  llm_fn: fn messages -> MyApp.LLM.chat(messages) end
+)
+# => {:ok, %{answer: "You decided to use JWT...", context: context_pack}}
+```
+
+#### Session Handoff
+
+Store and retrieve session context for continuity across sessions:
+
+```elixir
+# At end of session
+Recollect.Handoff.create(scope_id,
+  what: "Implementing user auth",
+  next: ["Add login controller", "Create session middleware"],
+  artifacts: ["lib/auth/user.ex", "lib/auth/token.ex"],
+  blockers: ["Waiting on API spec"]
+)
+
+# At start of next session
+{:ok, handoff} = Recollect.Handoff.get(scope_id)
+
+# Or auto-load into working memory
+Recollect.WorkingMemory.load_handoff(scope_id)
+
+# Clean up old handoffs
+Recollect.Handoff.cleanup(scope_id, keep: 5)
+```
+
+#### Outcome Feedback
+
+Close the learning loop by signaling whether recalled memories were helpful:
+
+```elixir
+# After search + using results
+Recollect.Outcome.good(scope_id)   # Strengthens last-retrieved entries
+Recollect.Outcome.bad(scope_id)    # Weakens last-retrieved entries
+
+# Apply to specific entries
+Recollect.Outcome.apply([entry_id_1, entry_id_2], :good)
 ```
 
 #### Maintenance
 
 ```elixir
 # Archive stale entries (entries not accessed in 90 days with < 3 accesses)
-{:ok, archived_count} = Recollect.decay()
-{:ok, archived_count} = Recollect.decay(max_age_days: 60, min_access_count: 5)
+{:ok, archived_count} = Recollect.Maintenance.Decay.run()
+{:ok, archived_count} = Recollect.Maintenance.Decay.run(max_age_days: 60, min_access_count: 5)
 
 # Re-embed entries/chunks with nil embeddings (after model change)
-{:ok, count} = Recollect.reembed()
-{:ok, count} = Recollect.reembed(batch_size: 50, concurrency: 4)
+{:ok, count} = Recollect.Maintenance.Reembed.run()
+{:ok, count} = Recollect.Maintenance.Reembed.run(batch_size: 50, concurrency: 4)
+
+# Sleep consolidation: decay + merge overlapping + detect conflicts
+{:ok, result} = Recollect.Consolidation.run(scope_id: workspace_id)
+{:ok, preview} = Recollect.Consolidation.dry_run(scope_id: workspace_id)
+
+# Invalidation: weaken memories about deprecated patterns
+{:ok, result} = Recollect.Invalidation.run_from_git(scope_id: workspace_id)
+Recollect.Invalidation.invalidate(scope_id, "webpack", reason: "migrated to vite")
+```
+
+#### Export / Import
+
+```elixir
+# Export all data to JSONL
+{:ok, result} = Recollect.Export.export_all("/path/to/backup.jsonl")
+
+# Export specific table
+{:ok, result} = Recollect.Export.export_table(:recollect_entries, "/path/to/entries.jsonl")
+
+# Import from JSONL
+{:ok, result} = Recollect.Import.import_all("/path/to/backup.jsonl")
+
+# Validate without importing
+{:ok, meta} = Recollect.Import.validate("/path/to/backup.jsonl")
 ```
 
 #### Learning
 
-Recollect can automatically learn from external sources like git history, Claude Code, and OpenCode conversations:
+Recollect can automatically learn from external sources like git history and coding agent conversations:
 
 ```elixir
-# Run all learning sources (git, claude_code, opencode)
+# Run all learning sources
 {:ok, result} = Recollect.Learning.Pipeline.run(scope_id: workspace_id)
-# => %{git: %{fetched: 12, learned: 8, skipped: 4}, claude_code: %{...}, opencode: %{...}}
 
 # Run specific sources only
-{:ok, result} = Recollect.Learning.Pipeline.run(scope_id: workspace_id, sources: [:git])
+{:ok, result} = Recollect.Learning.Pipeline.run(scope_id: workspace_id, sources: [Recollect.Learner.Git])
 
 # Dry run - preview what would be learned
 {:ok, preview} = Recollect.Learning.Pipeline.run(scope_id: workspace_id, dry_run: true)
@@ -331,6 +433,7 @@ Then add to your config:
 ```elixir
 config :recollect,
   learning: [
+    enabled: true,
     sources: [Recollect.Learner.Git, Recollect.Learner.ClaudeCode, MyApp.Learner.CI]
   ]
 ```
@@ -342,18 +445,21 @@ config :recollect,
   # Required: your Ecto repo
   repo: MyApp.Repo,
 
-  # Embedding configuration
-  embedding: [
-    # Provider module (required for embedding to work)
-    provider: Recollect.Embedding.OpenRouter,  # or OpenAI, or Ollama
+  # Database adapter (default: Postgres)
+  database_adapter: Recollect.DatabaseAdapter.Postgres,
 
-    # Runtime credential resolver (recommended)
-    credentials_fn: fn -> %{api_key: "...", model: "...", dimensions: 768} end,
+  # Embedding configuration (default: Local with Bumblebee)
+  embedding: [
+    # Provider module
+    provider: Recollect.Embedding.OpenRouter,  # or Local
+
+    # Runtime credential resolver (for API-based providers)
+    credentials_fn: fn -> %{api_key: "...", model: "...", dimensions: 1536} end,
 
     # OR static config (simpler but less secure)
     api_key: "sk-...",
-    model: "google/text-embedding-004",
-    dimensions: 768
+    model: "openai/text-embedding-3-small",
+    dimensions: 1536
   ],
 
   # LLM extraction configuration (required for Tier 1 pipeline)
@@ -378,9 +484,23 @@ config :recollect,
 
 | Provider | Module | Default Model | Dimensions | Notes |
 |----------|--------|---------------|------------|-------|
-| OpenRouter | `Recollect.Embedding.OpenRouter` | `google/text-embedding-004` | 768 | Best overall, supports Google/OpenAI models |
-| OpenAI | `Recollect.Embedding.OpenAI` | `text-embedding-3-large` | 3072 | Direct OpenAI API |
-| Ollama | `Recollect.Embedding.Ollama` | `nomic-embed-text` | 768 | Local, no API key needed |
+| Local | `Recollect.Embedding.Local` | `all-MiniLM-L6-v2` | 384 | Default. No API key needed. Requires `:bumblebee` dep. |
+| OpenRouter | `Recollect.Embedding.OpenRouter` | `openai/text-embedding-3-small` | 1536 | Best for hosted apps. Supports Google/OpenAI models via OpenRouter. |
+
+### Using Local Embeddings (default)
+
+No API key needed. Just add the Bumblebee dependency to your `mix.exs`:
+
+```elixir
+defp deps do
+  [
+    {:recollect, github: "kittyfromouterspace/recollect"},
+    {:bumblebee, "~> 0.6.0"}
+  ]
+end
+```
+
+Model weights are downloaded from HuggingFace Hub on first use and cached on disk.
 
 ## Schema Overview
 
@@ -403,10 +523,19 @@ Relation types: `supports`, `blocks`, `causes`, `relates_to`, `part_of`, `depend
 
 | Table | Purpose | Key Fields |
 |-------|---------|------------|
-| `recollect_entries` | Knowledge entries | content, entry_type, embedding, confidence, access_count |
+| `recollect_entries` | Knowledge entries | content, entry_type, embedding, confidence, half_life_days, access_count |
 | `recollect_edges` | Lightweight edges | relation (6 types), weight, source/target entry |
 
 Edge relation types: `leads_to`, `supports`, `contradicts`, `derived_from`, `supersedes`, `related_to`.
+
+### Session & Lifecycle
+
+| Table | Purpose | Key Fields |
+|-------|---------|------------|
+| `recollect_handoffs` | Session handoff data | what, next, artifacts, blockers |
+| `recollect_consolidation_runs` | Consolidation pass records | decayed, merged, conflicts_detected |
+| `recollect_mipmaps` | Progressive detail levels | level (anchor/abstract/summary/full), embedding |
+| `recollect_conflicts` | Detected memory conflicts | conflicting entries, conflict type |
 
 ### Dual Identifiers
 
@@ -438,6 +567,12 @@ defmodule MyApp.CustomEmbedding do
   @impl true
   def embed(text, opts) do
     # Optional — defaults to calling generate/2 with a single text
+  end
+
+  @impl true
+  def model_id(opts) do
+    # Optional — returns model identifier for provenance tracking
+    "my-model/v1"
   end
 end
 ```
@@ -477,9 +612,53 @@ defmodule MyApp.Neo4jGraph do
 end
 ```
 
+### `Recollect.DatabaseAdapter`
+
+Implement to add a new database backend:
+
+```elixir
+defmodule MyApp.CustomAdapter do
+  @behaviour Recollect.DatabaseAdapter
+
+  @impl true
+  def vector_type(dimensions), do: "vector(#{dimensions})"
+
+  @impl true
+  def vector_ecto_type, do: :string
+
+  @impl true
+  def format_embedding(list), do: "[#{Enum.join(list, ",")}]"
+
+  # ... see Recollect.DatabaseAdapter for all callbacks
+end
+```
+
+## Telemetry
+
+Recollect emits `:telemetry` events for all major operations. Attach handlers to monitor performance:
+
+| Event | Description |
+|-------|-------------|
+| `[:recollect, :remember, :start/:stop/:exception]` | Entry creation |
+| `[:recollect, :search, :start/:stop/:exception]` | Search queries |
+| `[:recollect, :pipeline, :start/:stop/:exception]` | Document pipeline |
+| `[:recollect, :embed, :stop]` | Embedding completion |
+| `[:recollect, :extract, :stop]` | Entity extraction |
+| `[:recollect, :decay, :stop]` | Decay maintenance |
+| `[:recollect, :learning, :start/:stop]` | Learning pipeline |
+| `[:recollect, :handoff, :create/:get/:load, :stop]` | Handoff operations |
+| `[:recollect, :consolidation, :stop]` | Consolidation runs |
+| `[:recollect, :invalidation, :start/:stop]` | Invalidation passes |
+| `[:recollect, :completion, :start/:stop/:exception]` | LLM-augmented completion |
+
+All `:stop` events include `%{duration: native_time}` in measurements.
+
 ## Requirements
 
 - Elixir >= 1.17
-- PostgreSQL with pgvector extension
-- An embedding API (OpenRouter, OpenAI, or local Ollama)
-- An LLM API for entity extraction (only needed for Tier 1)
+- One supported database:
+  - PostgreSQL with pgvector extension
+  - SQLite3 with sqlite-vec extension
+  - libSQL with native vector support
+- An embedding provider (Local/Bumblebee included by default, or API-based via OpenRouter)
+- An LLM API for entity extraction (only needed for Tier 1 pipeline)

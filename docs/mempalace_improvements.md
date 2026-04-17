@@ -18,7 +18,7 @@ This document explores potential improvements inspired by MemPalace (https://git
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Create `Recollect.Classification` module | ✅ Done | `lib/mneme/classification.ex` |
+| Create `Recollect.Classification` module | ✅ Done | `lib/recollect/classification.ex` |
 | Add regex patterns for 5 categories | ✅ Done | decision, preference, milestone, problem, emotional |
 | Integrate into `Knowledge.remember/2` | ✅ Done | Added `:auto_classify` option |
 | Add tests | ❌ Not done | — |
@@ -119,7 +119,7 @@ MemPalace has `fact_checker.py` that checks new facts against the knowledge grap
 
 ### Current State in Recollect
 
-Recollect already has `ConflictDetection` (`lib/mneme/conflict_detection.ex`), but it:
+Recollect already has `ConflictDetection` (`lib/recollect/conflict_detection.ex`), but it:
 - Compares entries **pairwise** (O(n²))
 - Doesn't check against the **knowledge graph** entities/relations
 
@@ -303,11 +303,11 @@ Recollect's `entry_types`:
 - `layers.py` — 4-layer memory stack (515 lines)
 
 ### Recollect (current)
-- `lib/mneme/knowledge.ex` — Tier 2 API (144 lines)
-- `lib/mneme/conflict_detection.ex` — Pairwise conflict (192 lines)
-- `lib/mneme/schema/entry.ex` — Entry schema (78 lines)
-- `lib/mneme/schema/entity.ex` — Entity schema (60 lines)
-- `lib/mneme/search.ex` — Unified search (111 lines)
+- `lib/recollect/knowledge.ex` — Tier 2 API (144 lines)
+- `lib/recollect/conflict_detection.ex` — Pairwise conflict (192 lines)
+- `lib/recollect/schema/entry.ex` — Entry schema (78 lines)
+- `lib/recollect/schema/entity.ex` — Entity schema (60 lines)
+- `lib/recollect/search.ex` — Unified search (111 lines)
 
 ---
 

@@ -27,4 +27,23 @@
 
 ## Versioning
 
-This library is consumed as a git dependency by Worth. When adding new functionality or making breaking changes, you **must** create a new git tag (e.g., `v0.2.0`) so that Worth's `mix.exs` can pin to a specific version. Follow semantic versioning.
+This library is consumed as a git dependency by Worth and published to [Hex.pm](https://hex.pm/packages/recollect). Follow semantic versioning. Keep the `@version` in `mix.exs`, the git tag, and the Hex publish in sync.
+
+### Release SOP
+
+1. **Bump `@version`** in `mix.exs` (line 4). This also updates `source_ref` in the docs config (line 85).
+2. **Run checks**: `mix format`, `mix test`, `mix docs` — verify everything passes.
+3. **Commit** the version bump with message `v{VERSION}`.
+4. **Tag** the commit: `git tag v{VERSION}`. The tag name must match `mix.exs` exactly (prefixed with `v`).
+5. **Push**: `git push origin main --tags`.
+6. **Publish to Hex**: `mix hex.publish`. This builds docs and uploads the package. Ensure `HEX_API_KEY` is set.
+
+After publishing, verify at:
+- GitHub releases: https://github.com/kittyfromouterspace/recollect/releases
+- Hex package: https://hex.pm/packages/recollect
+
+### Version History
+
+| Version | Git Tag | Hex Published | Notes |
+|---------|---------|---------------|-------|
+| 0.4.5   | `v0.4.5` | Yes | Moved tag to include ex_doc setup |

@@ -33,8 +33,8 @@ The `Recollect.Learner.CodingAgent` module is a dispatcher that discovers and de
 ### Provider architecture
 
 ```
-lib/mneme/learning/coding_agent.ex           # Dispatcher — implements Recollect.Learner
-lib/mneme/learning/coding_agent/
+lib/recollect/learning/coding_agent.ex        # Dispatcher — implements Recollect.Learner
+lib/recollect/learning/coding_agent/
 ├── provider.ex       # Behaviour: agent_name, available?, discover, fetch, extract, summarize
 ├── util.ex           # Shared helpers: frontmatter parsing, JSONL, project tags
 ├── claude_code.ex    # Claude Code provider
@@ -74,7 +74,7 @@ Reads from `~/.local/share/opencode/opencode.db` (SQLite):
 
 ### Adding new providers
 
-1. Create `lib/mneme/learning/coding_agent/my_agent.ex`
+1. Create `lib/recollect/learning/coding_agent/my_agent.ex`
 2. Implement `Recollect.Learner.CodingAgent.Provider` behaviour
 3. Add the module to `@providers` in `coding_agent.ex`
 4. The dispatcher auto-discovers available providers at runtime
@@ -286,7 +286,7 @@ Context hints (git repo, file path, OS) are auto-captured by `Knowledge.remember
 ## File Layout
 
 ```
-lib/mneme/learning/
+lib/recollect/learning/
 ├── behaviour.ex          # Recollect.Learner behaviour definition
 ├── pipeline.ex           # Orchestration: fetch → extract → summarize → store
 ├── git.ex                # Recollect.Learner.Git — fetch, extract, summarize
@@ -302,7 +302,7 @@ lib/mneme/learning/
     ├── gemini.ex         # Gemini CLI provider
     └── opencode.ex       # OpenCode provider
 
-lib/mneme/
+lib/recollect/
 ├── invalidation.ex       # Deprecation via deprecate/4, weakening, replacement
 ├── knowledge.ex          # Knowledge.remember/2 — the store function
 └── schema/entry.ex       # Entry schema with entry_types including development_insight
@@ -312,13 +312,13 @@ lib/mneme/
 
 ```elixir
 # Run all learners (Git, CodingAgent)
-{:ok, result} = Recollect.learn(scope_id: workspace_id)
+{:ok, result} = Recollect.Learning.Pipeline.run(scope_id: workspace_id)
 
 # Run git learner only
-{:ok, result} = Recollect.learn(scope_id: workspace_id, sources: [:git])
+{:ok, result} = Recollect.Learning.Pipeline.run(scope_id: workspace_id, sources: [Recollect.Learner.Git])
 
 # Preview without storing
-{:ok, preview} = Recollect.learn(scope_id: workspace_id, dry_run: true)
+{:ok, preview} = Recollect.Learning.Pipeline.run(scope_id: workspace_id, dry_run: true)
 
 # Trigger deprecation manually
 Recollect.Invalidation.deprecate(scope_id, "webpack", "vite",

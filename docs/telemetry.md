@@ -17,7 +17,7 @@ In your application, attach a handler to receive events:
 ```elixir
 # In your application.ex
 def start(_type, _args) do
-  :telemetry.attach("mneme-handler", [:recollect, :*], &handle_event/4, [])
+  :telemetry.attach("recollect-handler", [:recollect, :*], &handle_event/4, [])
   # ... rest of your supervision tree
 end
 
@@ -272,7 +272,7 @@ defmodule MyApp.RecollectTelemetry do
   require Logger
 
   def attach do
-    :telemetry.attach("myapp-mneme", [:recollect, :*], __MODULE__.handle_event, [])
+    :telemetry.attach("myapp-recollect", [:recollect, :*], __MODULE__.handle_event, [])
   end
 
   def handle_event([:recollect, :learning, :stop], measurements, metadata, _config) do
