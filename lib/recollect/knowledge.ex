@@ -142,6 +142,43 @@ defmodule Recollect.Knowledge do
   end
 
   @doc """
+  Get recent entries for an owner across all scopes (global brain).
+
+  Entries with `scope_id = nil` are treated as general knowledge
+  not bound to any workspace. They appear in this query.
+  """
+  def recent_by_owner(owner_id, opts \\ []) do
+    repo = Config.repo()
+    limit = Keyword.get(opts, :limit, 50)
+
+    repo.all(
+      from(e in Entry,
+        where: e.owner_id == ^owner_id and e.entry_type != "archived",
+        order_by: [desc: e.inserted_at],
+        limit: ^limit
+      )
+    )
+  end
+
+  @doc """
+  Search entries by owner across all scopes (global brain search).
+
+  Results from the current workspace scope are prioritized higher.
+  Use `:scope_priority` to set the active workspace for boosting.
+
+  Returns `{:ok, results}` with `result_type: :entry` and `scope_id` on each result.
+  """
+  def search_by_owner(query_text, owner_id, opts \\ []) do
+    Recollect.Telemetry.span(
+      [:recollect, :search_by_owner],
+      %{owner_id: owner_id},
+      fn ->
+        Recollect.Search.Vector.search_entries_by_owner(query_text, owner_id, opts)
+      end
+    )
+  end
+
+  @doc """
   Apply supersession: demote old entries matching entity+relation pattern.
   New entry supersedes old ones by setting their confidence to 0.1.
   """

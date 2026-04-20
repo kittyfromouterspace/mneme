@@ -116,6 +116,43 @@ defmodule Recollect.Search.Vector do
     end
   end
 
+  @doc """
+  Search entries by owner_id across all scopes (global brain search).
+  Used for cross-workspace knowledge retrieval with workspace-priority ranking.
+
+  Options:
+    - `:scope_priority` — a scope_id to boost results from (workspace priority)
+    - `:limit` — max results (default 10)
+    - `:min_score` — minimum similarity score (default 0.0)
+    - `:filters` — additional entry filters
+  """
+  def search_entries_by_owner(query_text, owner_id, opts \\ []) do
+    limit = Keyword.get(opts, :limit, 10)
+    min_score = Keyword.get(opts, :min_score, 0.0)
+    filters = Keyword.get(opts, :filters, %{})
+    scope_priority = Keyword.get(opts, :scope_priority)
+
+    case Embedder.embed_query(query_text) do
+      {:ok, embedding} ->
+        embedding_str = embedding_to_str(embedding)
+
+        case do_search_entries_by_owner(embedding_str, owner_id, limit, min_score, filters) do
+          {:ok, results} ->
+            results = apply_scope_priority(results, scope_priority)
+            {:ok, results}
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp apply_scope_priority(results, nil), do: results
+  defp apply_scope_priority(results, _scope_id), do: results
+
   @doc "Search entities by vector similarity."
   def search_entities_vec(query_text, owner_id, opts \\ []) do
     limit = Keyword.get(opts, :limit, 5)
@@ -218,6 +255,24 @@ defmodule Recollect.Search.Vector do
 
       {:error, reason} ->
         Logger.error("Recollect vector search (entries) failed: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  defp do_search_entries_by_owner(embedding_str, owner_id, limit, min_score, filters) do
+    adapter = Config.adapter()
+    repo = Config.repo()
+
+    {sql, params} = entries_query_by_owner(adapter.dialect(), adapter, embedding_str, owner_id, limit, min_score, filters)
+
+    case repo.query(sql, params) do
+      {:ok, %{rows: rows, columns: columns}} ->
+        results = Enum.map(rows, fn row -> Recollect.Util.row_to_map(columns, row) end)
+        results = add_context_boost(results)
+        {:ok, results}
+
+      {:error, reason} ->
+        Logger.error("Recollect vector search (entries by owner) failed: #{inspect(reason)}")
         {:error, reason}
     end
   end
@@ -337,6 +392,58 @@ defmodule Recollect.Search.Vector do
 
     # similarity (SELECT) + scope_id + similarity (WHERE) + min_score + filter_params + distance (ORDER BY) + limit
     params = [embedding_str, scope_id, embedding_str, min_score] ++ filter_params ++ [embedding_str, limit]
+    {sql, params}
+  end
+
+  defp entries_query_by_owner(:postgres, _adapter, embedding_str, owner_id, limit, min_score, filters) do
+    {filter_sql, filter_params} = build_entry_filters_pg(filters)
+
+    sql = """
+    SELECT
+      me.id, me.content, me.summary, me.entry_type, me.source,
+      me.metadata, me.confidence, me.inserted_at,
+      me.half_life_days, me.pinned, me.emotional_valence, me.access_count,
+      me.last_accessed_at, me.context_hints, me.scope_id,
+      (1 - (me.embedding <=> $1::text::vector)) AS score
+    FROM recollect_entries me
+    WHERE me.owner_id = $2
+      AND me.embedding IS NOT NULL
+      AND me.entry_type != 'archived'
+      AND (1 - (me.embedding <=> $1::text::vector)) >= $3
+      #{filter_sql}
+    ORDER BY me.embedding <=> $1::text::vector
+    LIMIT $4
+    """
+
+    params = [embedding_str, Recollect.Util.uuid_to_bin(owner_id), min_score, limit | filter_params]
+    {sql, params}
+  end
+
+  defp entries_query_by_owner(dialect, adapter, embedding_str, owner_id, limit, min_score, filters)
+       when dialect in [:sqlite, :libsql] do
+    similarity = adapter.vector_similarity_sql("me.embedding", "?")
+    distance = adapter.vector_distance_sql("me.embedding", "?")
+
+    {filter_sql, filter_params} = build_entry_filters_sqlite(filters)
+
+    sql = """
+    SELECT
+      me.id, me.content, me.summary, me.entry_type, me.source,
+      me.metadata, me.confidence, me.inserted_at,
+      me.half_life_days, me.pinned, me.emotional_valence, me.access_count,
+      me.last_accessed_at, me.context_hints, me.scope_id,
+      #{similarity} AS score
+    FROM recollect_entries me
+    WHERE me.owner_id = ?
+      AND me.embedding IS NOT NULL
+      AND me.entry_type != 'archived'
+      AND #{similarity} >= ?
+      #{filter_sql}
+    ORDER BY #{distance}
+    LIMIT ?
+    """
+
+    params = [embedding_str, owner_id, embedding_str, min_score] ++ filter_params ++ [embedding_str, limit]
     {sql, params}
   end
 
