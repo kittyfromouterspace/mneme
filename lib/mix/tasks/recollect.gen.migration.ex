@@ -24,7 +24,11 @@ defmodule Mix.Tasks.Recollect.Gen.Migration do
 
     target = Path.join(migrations_path, filename)
 
-    up_sql = Recollect.MigrationGenerator.generate_up(dimensions: dimensions)
+    # generate_up/2's first argument is the adapter — passing the opts
+    # list there binds it as the adapter module and crashes.
+    up_sql =
+      Recollect.MigrationGenerator.generate_up(Recollect.Config.adapter(), dimensions: dimensions)
+
     down_sql = Recollect.MigrationGenerator.generate_down()
 
     content = """

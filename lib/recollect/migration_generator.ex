@@ -59,6 +59,7 @@ defmodule Recollect.MigrationGenerator do
     prefix = Keyword.get(opts, :table_prefix, "recollect_")
 
     """
+    drop table(:#{prefix}handoffs)
     drop table(:#{prefix}edges)
     drop table(:#{prefix}entries)
     drop table(:#{prefix}pipeline_runs)
@@ -139,7 +140,8 @@ defmodule Recollect.MigrationGenerator do
       add :owner_id, #{inspect(uuid_type_atom)}, null: false
       add :scope_id, #{inspect(uuid_type_atom)}
       add :document_id, references(:#{prefix}documents, type: :binary_id, on_delete: :delete_all), null: false
-      add :inserted_at, :utc_datetime_usec, null: false, default: fragment("datetime('now')")
+      add :embedding_model_id, :string
+      add :inserted_at, :utc_datetime_usec, null: false, default: fragment("#{now_default(adapter)}")
     end
 
     create table(:#{prefix}entities, primary_key: false) do
@@ -152,6 +154,7 @@ defmodule Recollect.MigrationGenerator do
       add :first_seen_at, :utc_datetime_usec
       add :last_seen_at, :utc_datetime_usec
       #{generate_vector_column(adapter, :embedding, dimensions)}
+      add :embedding_model_id, :string
       add :owner_id, #{inspect(uuid_type_atom)}, null: false
       add :scope_id, #{inspect(uuid_type_atom)}
       add :collection_id, references(:#{prefix}collections, type: :binary_id, on_delete: :delete_all), null: false
@@ -238,6 +241,18 @@ defmodule Recollect.MigrationGenerator do
       add :target_entry_id, references(:#{prefix}entries, type: :binary_id, on_delete: :delete_all), null: false
       timestamps(type: :utc_datetime_usec)
     end
+
+    create table(:#{prefix}handoffs, primary_key: false) do
+      add :id, :binary_id, primary_key: true
+      add :scope_id, #{inspect(uuid_type_atom)}, null: false
+      add :session_id, #{inspect(uuid_type_atom)}
+      add :what, :text, null: false
+      add :next, :text
+      add :artifacts, :text
+      add :blockers, :text
+      add :created_at, :utc_datetime_usec, null: false
+      add :updated_at, :utc_datetime_usec, null: false
+    end
     """
   end
 
@@ -282,10 +297,22 @@ defmodule Recollect.MigrationGenerator do
     #{generate_vector_index(adapter, "#{prefix}entries", :embedding, dimensions)}
 
     create unique_index(:#{prefix}edges, [:source_entry_id, :target_entry_id, :relation])
+
+    create index(:#{prefix}handoffs, [:scope_id, :created_at])
     """
   end
 
   # ── Helper Functions ────────────────────────────────────────────────────
+
+  # Dialect-correct "now" default. Postgres has no datetime('now'); SQLite
+  # requires expression defaults to be parenthesised.
+  defp now_default(adapter) do
+    if adapter.dialect() == :postgres do
+      "now()"
+    else
+      "(datetime('now'))"
+    end
+  end
 
   defp generate_vector_column(adapter, name, dimensions) do
     type_str = adapter.vector_type(dimensions)
@@ -307,7 +334,16 @@ defmodule Recollect.MigrationGenerator do
     |> case do
       sql when is_binary(sql) ->
         if adapter.dialect() == :postgres do
-          ~s(execute """\n    #{sql}\n    """)
+          # Re-indent the (multi-line) SQL so every content line sits deeper
+          # than the closing heredoc delimiter — otherwise the generated
+          # migration compiles with "outdented heredoc" warnings.
+          body =
+            sql
+            |> String.trim()
+            |> String.split("\n")
+            |> Enum.map_join("\n", &("  " <> String.trim_trailing(&1)))
+
+          ~s(execute """\n#{body}\n""")
         else
           ~s(execute "#{String.replace(sql, "\"", "\\\"")}")
         end
