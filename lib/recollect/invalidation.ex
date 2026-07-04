@@ -39,10 +39,11 @@ defmodule Recollect.Invalidation do
   def run_from_git(opts \\ []) do
     scope_id = Keyword.fetch!(opts, :scope_id)
     days = Keyword.get(opts, :days, 7)
+    cd = Keyword.get(opts, :cd)
 
     {_, telemetry_meta} =
       Telemetry.span([:recollect, :invalidation], %{scope_id: scope_id, days: days}, fn ->
-        migrations = detect_migrations(days)
+        migrations = detect_migrations(days, cd: cd)
 
         results =
           Enum.map(migrations, fn migration ->
@@ -117,9 +118,19 @@ defmodule Recollect.Invalidation do
 
   @doc """
   Detect migration patterns in recent git commits.
+
+  Options: `:cd` — repository directory to scan (defaults to the current
+  working directory; pass the workspace root when the host process does
+  not live inside the repo of interest).
   """
-  def detect_migrations(days \\ 7) do
-    case System.cmd("git", ["log", "--since=#{days} days", "--pretty=format:%s"], stderr_to_stdout: true) do
+  def detect_migrations(days \\ 7, opts \\ []) do
+    cmd_opts =
+      case Keyword.get(opts, :cd) do
+        nil -> [stderr_to_stdout: true]
+        dir -> [stderr_to_stdout: true, cd: dir]
+      end
+
+    case System.cmd("git", ["log", "--since=#{days} days", "--pretty=format:%s"], cmd_opts) do
       {output, 0} ->
         output
         |> String.split("\n", trim: true)
@@ -128,6 +139,9 @@ defmodule Recollect.Invalidation do
       _ ->
         []
     end
+  rescue
+    # e.g. :cd points at a directory that vanished
+    _ -> []
   end
 
   # Private

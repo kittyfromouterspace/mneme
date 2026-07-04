@@ -46,8 +46,15 @@ defmodule Recollect.Extraction.LlmJson do
 
   @impl true
   def extract(text, opts) do
-    llm_fn = Keyword.fetch!(opts, :llm_fn)
+    case Keyword.fetch(opts, :llm_fn) do
+      {:ok, llm_fn} -> do_extract(text, llm_fn, opts)
+      # No LLM configured: extraction degrades to a skip, like embedding —
+      # raising here used to abort the whole pipeline run.
+      :error -> {:error, :no_llm_fn}
+    end
+  end
 
+  defp do_extract(text, llm_fn, opts) do
     messages = [
       %{role: "system", content: @extraction_prompt},
       %{role: "user", content: text}
