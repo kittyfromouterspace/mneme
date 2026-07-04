@@ -54,7 +54,8 @@ defmodule Recollect.Consolidation do
 
     start_time = System.monotonic_time()
 
-    {result, _} =
+    # Telemetry.span returns the fun's result verbatim.
+    result =
       Telemetry.span([:recollect, :consolidation], %{scope_id: scope_id}, fn ->
         repo = Config.repo()
         owner_id = fetch_owner_id(scope_id, repo)
@@ -92,7 +93,7 @@ defmodule Recollect.Consolidation do
           create_summary_entries(merge_result.summaries, scope_id, owner_id, repo)
         end
 
-        result = %{
+        %{
           decayed: decay_result.count,
           removed: length(decay_result.removed),
           merged: merge_result.merged,
@@ -100,8 +101,6 @@ defmodule Recollect.Consolidation do
           conflicts_detected: length(conflicts),
           duration_ms: duration_ms
         }
-
-        {%{result: result}, result}
       end)
 
     {:ok, result}

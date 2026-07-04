@@ -56,23 +56,25 @@ defmodule Recollect.Outcome do
   defp do_update(entry_ids, delta, score) do
     repo = Config.repo()
     now = DateTime.utc_now()
+    # Postgres uuid params must be 16-byte binaries; tracker ids may be
+    # UUID strings (e.g. from Ecto-loaded entries).
+    id_bins = Enum.map(entry_ids, &Recollect.Util.uuid_to_bin/1)
 
-    try do
-      repo.query(
-        """
-          UPDATE recollect_entries
-          SET half_life_days = GREATEST(1, half_life_days + $1),
-              outcome_score = $2,
-              confidence_state = CASE WHEN $2 > 0 THEN 'verified' ELSE 'active' END,
-              updated_at = $3
-          WHERE id = ANY($4)
-        """,
-        [delta, score, now, entry_ids]
-      )
-
-      {:ok, length(entry_ids)}
-    rescue
-      _ -> {:ok, 0}
+    case repo.query(
+           """
+             UPDATE recollect_entries
+             SET half_life_days = GREATEST(1, half_life_days + $1),
+                 outcome_score = $2,
+                 confidence_state = CASE WHEN $2 > 0 THEN 'verified' ELSE 'active' END,
+                 updated_at = $3
+             WHERE id = ANY($4)
+           """,
+           [delta, score, now, id_bins]
+         ) do
+      {:ok, %{num_rows: n}} -> {:ok, n}
+      {:error, _reason} -> {:ok, 0}
     end
+  rescue
+    _ -> {:ok, 0}
   end
 end

@@ -42,36 +42,33 @@ defmodule Recollect.Handoff do
     repo = Config.repo()
     now = DateTime.utc_now()
 
-    {result, _} =
-      Telemetry.span(
-        [:recollect, :handoff, :create],
-        %{scope_id: scope_id, next_count: length(next), artifacts_count: length(artifacts)},
-        fn ->
-          result =
-            repo.query(
-              """
-                INSERT INTO recollect_handoffs
-                  (id, scope_id, session_id, what, next, artifacts, blockers, created_at, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-              """,
-              [
-                Ecto.UUID.generate(),
-                Recollect.Util.uuid_to_bin(scope_id),
-                session_id && Recollect.Util.uuid_to_bin(session_id),
-                what,
-                Jason.encode!(next),
-                Jason.encode!(artifacts),
-                Jason.encode!(blockers),
-                now,
-                now
-              ]
-            )
-
-          {%{result: result}, result}
-        end
-      )
-
-    result
+    # Telemetry.span returns the fun's result verbatim — return the query
+    # result directly (wrapping it in a tuple leaks the wrapper to callers).
+    Telemetry.span(
+      [:recollect, :handoff, :create],
+      %{scope_id: scope_id, next_count: length(next), artifacts_count: length(artifacts)},
+      fn ->
+        repo.query(
+          """
+            INSERT INTO recollect_handoffs
+              (id, scope_id, session_id, what, next, artifacts, blockers, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          """,
+          [
+            # Postgres uuid params must be 16-byte binaries, not strings
+            Recollect.Util.uuid_to_bin(Ecto.UUID.generate()),
+            Recollect.Util.uuid_to_bin(scope_id),
+            session_id && Recollect.Util.uuid_to_bin(session_id),
+            what,
+            Jason.encode!(next),
+            Jason.encode!(artifacts),
+            Jason.encode!(blockers),
+            now,
+            now
+          ]
+        )
+      end
+    )
   end
 
   @doc """
@@ -80,45 +77,42 @@ defmodule Recollect.Handoff do
   def get(scope_id) do
     repo = Config.repo()
 
-    {result, _} =
-      Telemetry.span([:recollect, :handoff, :get], %{scope_id: scope_id}, fn ->
-        case repo.query(
-               """
-                 SELECT id, what, next, artifacts, blockers, session_id, created_at
-                 FROM recollect_handoffs
-                 WHERE scope_id = $1
-                 ORDER BY created_at DESC
-                 LIMIT 1
-               """,
-               [Recollect.Util.uuid_to_bin(scope_id)]
-             ) do
-          {:ok,
-           %{
-             rows: [
-               [id, what, next_json, artifacts_json, blockers_json, session_id, created_at] | []
-             ]
-           }} ->
-            handoff = %{
-              id: id,
-              what: what,
-              next: decode_json_or_list(next_json, []),
-              artifacts: decode_json_or_list(artifacts_json, []),
-              blockers: decode_json_or_list(blockers_json, []),
-              session_id: session_id,
-              created_at: created_at
-            }
+    Telemetry.span([:recollect, :handoff, :get], %{scope_id: scope_id}, fn ->
+      case repo.query(
+             """
+               SELECT id, what, next, artifacts, blockers, session_id, created_at
+               FROM recollect_handoffs
+               WHERE scope_id = $1
+               ORDER BY created_at DESC
+               LIMIT 1
+             """,
+             [Recollect.Util.uuid_to_bin(scope_id)]
+           ) do
+        {:ok,
+         %{
+           rows: [
+             [id, what, next_json, artifacts_json, blockers_json, session_id, created_at] | []
+           ]
+         }} ->
+          handoff = %{
+            id: id,
+            what: what,
+            next: decode_json_or_list(next_json, []),
+            artifacts: decode_json_or_list(artifacts_json, []),
+            blockers: decode_json_or_list(blockers_json, []),
+            session_id: session_id,
+            created_at: created_at
+          }
 
-            {%{result: {:ok, handoff}, found: true}, {:ok, handoff}}
+          {:ok, handoff}
 
-          {:ok, %{rows: []}} ->
-            {%{result: {:ok, nil}, found: false}, {:ok, nil}}
+        {:ok, %{rows: []}} ->
+          {:ok, nil}
 
-          {:error, reason} ->
-            {%{result: {:error, reason}}, {:error, reason}}
-        end
-      end)
-
-    result
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end)
   end
 
   @doc """
