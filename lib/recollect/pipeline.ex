@@ -164,13 +164,22 @@ defmodule Recollect.Pipeline do
     # Clear any previous usage data
     Process.delete(:recollect_last_embedding_usage)
 
-    case Embedder.embed_chunks(chunks) do
-      {:ok, _} = result ->
-        result
+    # Not configured: skip cleanly. Chunks are still stored (searchable
+    # via keyword/LIKE); only vector search is off. One debug line
+    # instead of an error+warning per chunk.
+    if Config.embedding_enabled?() do
+      case Embedder.embed_chunks(chunks) do
+        {:ok, _} = result ->
+          result
 
-      {:error, reason} ->
-        Logger.warning("Recollect.Pipeline: chunk embedding failed, continuing: #{inspect(reason)}")
-        {:ok, chunks}
+        {:error, reason} ->
+          Logger.warning("Recollect.Pipeline: chunk embedding failed, continuing: #{inspect(reason)}")
+
+          {:ok, chunks}
+      end
+    else
+      Logger.debug("Recollect.Pipeline: embedding disabled (no provider/credentials); skipping")
+      {:ok, chunks}
     end
   end
 
@@ -229,14 +238,17 @@ defmodule Recollect.Pipeline do
   end
 
   defp do_embed_entities(entities) do
-    # Embed entities async — don't block pipeline
-    Enum.each(entities, fn entity ->
-      Task.Supervisor.start_child(
-        Config.task_supervisor(),
-        fn -> Embedder.embed_entity(entity) end,
-        restart: :temporary
-      )
-    end)
+    # Embed entities async — don't block pipeline. Skip entirely when
+    # embedding is disabled (same reasoning as do_embed_chunks).
+    if Config.embedding_enabled?() do
+      Enum.each(entities, fn entity ->
+        Task.Supervisor.start_child(
+          Config.task_supervisor(),
+          fn -> Embedder.embed_entity(entity) end,
+          restart: :temporary
+        )
+      end)
+    end
 
     {:ok, entities}
   rescue
