@@ -77,19 +77,43 @@ defmodule Recollect.Extraction.LlmJson do
       |> String.replace(~r/```\n?/, "")
       |> String.trim()
 
-    case Jason.decode(json_content) do
+    # Small local models occasionally emit *almost*-valid JSON (a dropped
+    # closing quote on a key, a trailing comma). Try strict first, then a
+    # targeted repair, before giving up — otherwise one stray character
+    # discards a whole chunk's extraction.
+    case decode_lenient(json_content) do
       {:ok, %{"entities" => entities, "relations" => relations}} ->
         validated_entities = validate_entities(entities)
         validated_relations = validate_relations(relations)
         {:ok, %{entities: validated_entities, relations: validated_relations}}
 
+      {:ok, %{"entities" => entities}} ->
+        {:ok, %{entities: validate_entities(entities), relations: []}}
+
       {:ok, _} ->
         {:error, "Invalid extraction format: missing entities or relations key"}
 
       {:error, reason} ->
-        Logger.warning("Recollect.Extraction.LlmJson: JSON parse failed: #{inspect(reason)}")
+        Logger.debug("Recollect.Extraction.LlmJson: JSON parse failed: #{inspect(reason)}")
         {:ok, %{entities: [], relations: []}}
     end
+  end
+
+  defp decode_lenient(json) do
+    case Jason.decode(json) do
+      {:ok, _} = ok -> ok
+      {:error, _} -> json |> repair_json() |> Jason.decode()
+    end
+  end
+
+  # Repair the two most common small-model JSON errors. Both target tokens
+  # in KEY position only (after `{` or `,`), so string values are untouched.
+  defp repair_json(json) do
+    json
+    # dropped closing quote on a key: `{"weight: 0.8` -> `{"weight": 0.8`
+    |> String.replace(~r/([{,]\s*)"([A-Za-z_][A-Za-z0-9_]*):\s/, "\\1\"\\2\": ")
+    # trailing comma before a close: `[1,2,]` / `{...,}` -> strip the comma
+    |> String.replace(~r/,(\s*[}\]])/, "\\1")
   end
 
   defp validate_entities(entities) when is_list(entities) do
