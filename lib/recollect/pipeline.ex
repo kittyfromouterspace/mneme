@@ -179,6 +179,18 @@ defmodule Recollect.Pipeline do
   end
 
   defp do_extract(chunks, opts) do
+    if Config.extraction_enabled?() do
+      run_extraction(chunks, opts)
+    else
+      # Not configured (no llm_fn): skip the graph-extraction pass. Chunks
+      # are still stored + embedded; only entity/relation extraction is
+      # off. One debug line instead of a warning per chunk.
+      Logger.debug("Recollect.Pipeline: extraction disabled (no provider/llm_fn); skipping")
+      {:ok, %{entities: [], relations: []}}
+    end
+  end
+
+  defp run_extraction(chunks, opts) do
     collection_id = Keyword.fetch!(opts, :collection_id)
     owner_id = Keyword.fetch!(opts, :owner_id)
     scope_id = Keyword.get(opts, :scope_id)

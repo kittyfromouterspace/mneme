@@ -41,6 +41,8 @@ defmodule Recollect.Config do
         ]
   """
 
+  alias Recollect.Extraction.LlmJson
+
   @doc "The Ecto Repo module provided by the host app."
   def repo do
     Application.fetch_env!(:recollect, :repo)
@@ -110,7 +112,7 @@ defmodule Recollect.Config do
   @doc "Extraction provider module (implements Recollect.ExtractionProvider)."
   def extraction_provider do
     config = Application.get_env(:recollect, :extraction, [])
-    Keyword.get(config, :provider, Recollect.Extraction.LlmJson)
+    Keyword.get(config, :provider, LlmJson)
   end
 
   @doc "Extraction provider options (includes llm_fn from host app)."
@@ -150,6 +152,25 @@ defmodule Recollect.Config do
   @doc "Check if embedding is available."
   def embedding_enabled? do
     embedding_provider() != nil && embedding_credentials() != :disabled
+  end
+
+  @doc """
+  Check if entity/relation extraction is available.
+
+  The built-in `Recollect.Extraction.LlmJson` provider needs a host-supplied
+  `:llm_fn`; without one, the pipeline skips extraction cleanly instead of
+  failing per chunk. A custom provider configured with no `:llm_fn` is
+  assumed self-sufficient (enabled).
+  """
+  def extraction_enabled? do
+    provider = extraction_provider()
+    opts = extraction_opts()
+
+    cond do
+      is_nil(provider) -> false
+      provider == LlmJson -> is_function(Keyword.get(opts, :llm_fn))
+      true -> true
+    end
   end
 
   @doc "TaskSupervisor name for async operations."
