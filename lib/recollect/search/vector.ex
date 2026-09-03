@@ -34,6 +34,8 @@ defmodule Recollect.Search.Vector do
   - `:limit` — Max results (default: 10)
   - `:min_score` — Minimum similarity 0.0-1.0 (default: 0.0)
   - `:tier` — `:full`, `:lightweight`, or `:both` (default: `:both`)
+  - `:include_superseded` — include entries superseded via a `"supersedes"`
+    edge (default: false — superseded entries are excluded)
   - `:filters` — Map of additional filters:
       - `:entry_type` — Filter by entry type (e.g., :decision, :preference)
       - `:tags` — Filter by tags (list)
@@ -56,6 +58,7 @@ defmodule Recollect.Search.Vector do
             []
             |> maybe_search_chunks(embedding_str, opts, limit, min_score, tier)
             |> maybe_search_entries(embedding_str, opts, limit, min_score, tier, filters)
+            |> maybe_search_summaries(embedding_str, opts, limit, min_score, tier)
             |> maybe_escalate_to_mipmaps(query_text, opts, limit)
 
           {:ok, results}
@@ -105,11 +108,12 @@ defmodule Recollect.Search.Vector do
     limit = Keyword.get(opts, :limit, 10)
     min_score = Keyword.get(opts, :min_score, 0.0)
     filters = Keyword.get(opts, :filters, %{})
+    include_superseded = Keyword.get(opts, :include_superseded, false)
 
     case Embedder.embed_query(query_text) do
       {:ok, embedding} ->
         embedding_str = embedding_to_str(embedding)
-        do_search_entries(embedding_str, scope_id, limit, min_score, filters)
+        do_search_entries(embedding_str, scope_id, limit, min_score, filters, include_superseded)
 
       {:error, reason} ->
         {:error, reason}
@@ -131,12 +135,13 @@ defmodule Recollect.Search.Vector do
     min_score = Keyword.get(opts, :min_score, 0.0)
     filters = Keyword.get(opts, :filters, %{})
     scope_priority = Keyword.get(opts, :scope_priority)
+    include_superseded = Keyword.get(opts, :include_superseded, false)
 
     case Embedder.embed_query(query_text) do
       {:ok, embedding} ->
         embedding_str = embedding_to_str(embedding)
 
-        case do_search_entries_by_owner(embedding_str, owner_id, limit, min_score, filters) do
+        case do_search_entries_by_owner(embedding_str, owner_id, limit, min_score, filters, include_superseded) do
           {:ok, results} ->
             results = apply_scope_priority(results, scope_priority)
             {:ok, results}
@@ -216,11 +221,65 @@ defmodule Recollect.Search.Vector do
         acc
 
       scope_id ->
-        case do_search_entries(embedding_str, scope_id, limit, min_score, filters) do
+        include_superseded = Keyword.get(opts, :include_superseded, false)
+
+        case do_search_entries(embedding_str, scope_id, limit, min_score, filters, include_superseded) do
           {:ok, results} -> acc ++ Enum.map(results, &Map.put(&1, :result_type, :entry))
           _ -> acc
         end
     end
+  end
+
+  defp maybe_search_entries(acc, _, _, _, _, _, _), do: acc
+
+  # Document summary tier (Tier 1, :full/:both only): vector-match document
+  # gists, then contribute each hit's top chunks — marked `via: :summary` —
+  # when they aren't already present from direct chunk search.
+  defp maybe_search_summaries(acc, embedding_str, opts, limit, min_score, tier)
+       when tier in [:full, :both] do
+    case Keyword.get(opts, :owner_id) do
+      nil ->
+        acc
+
+      owner_id ->
+        case do_search_summaries(embedding_str, owner_id, limit, min_score) do
+          {:ok, []} ->
+            acc
+
+          {:ok, summaries} ->
+            acc ++ summary_chunks(summaries, embedding_str, acc, opts)
+
+          _ ->
+            acc
+        end
+    end
+  end
+
+  defp maybe_search_summaries(acc, _, _, _, _, _), do: acc
+
+  @summary_chunk_limit 3
+
+  defp summary_chunks(summaries, embedding_str, existing, opts) do
+    chunk_limit = Keyword.get(opts, :summary_chunk_limit, @summary_chunk_limit)
+
+    existing_ids =
+      MapSet.new(existing, fn r -> r["id"] || r[:id] end)
+
+    summaries
+    |> Enum.flat_map(fn summary ->
+      case do_top_chunks_for_document(embedding_str, summary["document_id"], chunk_limit) do
+        {:ok, chunks} ->
+          Enum.map(chunks, fn chunk ->
+            chunk
+            |> Map.put(:result_type, :chunk)
+            |> Map.put(:via, :summary)
+          end)
+
+        _ ->
+          []
+      end
+    end)
+    |> Enum.reject(fn chunk -> MapSet.member?(existing_ids, chunk["id"]) end)
   end
 
   defp do_search_chunks(embedding_str, owner_id, limit, min_score) do
@@ -239,11 +298,12 @@ defmodule Recollect.Search.Vector do
     end
   end
 
-  defp do_search_entries(embedding_str, scope_id, limit, min_score, filters) do
+  defp do_search_entries(embedding_str, scope_id, limit, min_score, filters, include_superseded) do
     adapter = Config.adapter()
     repo = Config.repo()
 
-    {sql, params} = entries_query(adapter.dialect(), adapter, embedding_str, scope_id, limit, min_score, filters)
+    {sql, params} =
+      entries_query(adapter.dialect(), adapter, embedding_str, scope_id, limit, min_score, filters, include_superseded)
 
     case repo.query(sql, params) do
       {:ok, %{rows: rows, columns: columns}} ->
@@ -259,11 +319,21 @@ defmodule Recollect.Search.Vector do
     end
   end
 
-  defp do_search_entries_by_owner(embedding_str, owner_id, limit, min_score, filters) do
+  defp do_search_entries_by_owner(embedding_str, owner_id, limit, min_score, filters, include_superseded) do
     adapter = Config.adapter()
     repo = Config.repo()
 
-    {sql, params} = entries_query_by_owner(adapter.dialect(), adapter, embedding_str, owner_id, limit, min_score, filters)
+    {sql, params} =
+      entries_query_by_owner(
+        adapter.dialect(),
+        adapter,
+        embedding_str,
+        owner_id,
+        limit,
+        min_score,
+        filters,
+        include_superseded
+      )
 
     case repo.query(sql, params) do
       {:ok, %{rows: rows, columns: columns}} ->
@@ -342,7 +412,7 @@ defmodule Recollect.Search.Vector do
     chunks_query(:sqlite, adapter, embedding_str, owner_id, limit, min_score)
   end
 
-  defp entries_query(:postgres, _adapter, embedding_str, scope_id, limit, min_score, filters) do
+  defp entries_query(:postgres, _adapter, embedding_str, scope_id, limit, min_score, filters, include_superseded) do
     {filter_sql, filter_params} = build_entry_filters_pg(filters)
 
     sql = """
@@ -357,6 +427,7 @@ defmodule Recollect.Search.Vector do
       AND me.embedding IS NOT NULL
       AND me.entry_type != 'archived'
       AND (1 - (me.embedding <=> $1::text::vector)) >= $3
+      #{superseded_exclusion_sql(include_superseded)}
       #{filter_sql}
     ORDER BY me.embedding <=> $1::text::vector
     LIMIT $4
@@ -366,7 +437,7 @@ defmodule Recollect.Search.Vector do
     {sql, params}
   end
 
-  defp entries_query(dialect, adapter, embedding_str, scope_id, limit, min_score, filters)
+  defp entries_query(dialect, adapter, embedding_str, scope_id, limit, min_score, filters, include_superseded)
        when dialect in [:sqlite, :libsql] do
     similarity = adapter.vector_similarity_sql("me.embedding", "?")
     distance = adapter.vector_distance_sql("me.embedding", "?")
@@ -385,6 +456,7 @@ defmodule Recollect.Search.Vector do
       AND me.embedding IS NOT NULL
       AND me.entry_type != 'archived'
       AND #{similarity} >= ?
+      #{superseded_exclusion_sql(include_superseded)}
       #{filter_sql}
     ORDER BY #{distance}
     LIMIT ?
@@ -395,7 +467,7 @@ defmodule Recollect.Search.Vector do
     {sql, params}
   end
 
-  defp entries_query_by_owner(:postgres, _adapter, embedding_str, owner_id, limit, min_score, filters) do
+  defp entries_query_by_owner(:postgres, _adapter, embedding_str, owner_id, limit, min_score, filters, include_superseded) do
     {filter_sql, filter_params} = build_entry_filters_pg(filters)
 
     sql = """
@@ -410,6 +482,7 @@ defmodule Recollect.Search.Vector do
       AND me.embedding IS NOT NULL
       AND me.entry_type != 'archived'
       AND (1 - (me.embedding <=> $1::text::vector)) >= $3
+      #{superseded_exclusion_sql(include_superseded)}
       #{filter_sql}
     ORDER BY me.embedding <=> $1::text::vector
     LIMIT $4
@@ -419,7 +492,7 @@ defmodule Recollect.Search.Vector do
     {sql, params}
   end
 
-  defp entries_query_by_owner(dialect, adapter, embedding_str, owner_id, limit, min_score, filters)
+  defp entries_query_by_owner(dialect, adapter, embedding_str, owner_id, limit, min_score, filters, include_superseded)
        when dialect in [:sqlite, :libsql] do
     similarity = adapter.vector_similarity_sql("me.embedding", "?")
     distance = adapter.vector_distance_sql("me.embedding", "?")
@@ -438,6 +511,7 @@ defmodule Recollect.Search.Vector do
       AND me.embedding IS NOT NULL
       AND me.entry_type != 'archived'
       AND #{similarity} >= ?
+      #{superseded_exclusion_sql(include_superseded)}
       #{filter_sql}
     ORDER BY #{distance}
     LIMIT ?
@@ -480,6 +554,120 @@ defmodule Recollect.Search.Vector do
     """
 
     {sql, [embedding_str, owner_id, embedding_str, limit]}
+  end
+
+  # ── Superseded Exclusion ────────────────────────────────────────────
+
+  # Superseded entries (incoming "supersedes" edge) are spent knowledge:
+  # hidden by default, opt back in with `include_superseded: true`.
+  defp superseded_exclusion_sql(true), do: ""
+
+  defp superseded_exclusion_sql(false) do
+    "AND NOT EXISTS (SELECT 1 FROM recollect_edges se WHERE se.target_entry_id = me.id AND se.relation = 'supersedes')"
+  end
+
+  # ── Document Summary Tier ───────────────────────────────────────────
+
+  defp do_search_summaries(embedding_str, owner_id, limit, min_score) do
+    adapter = Config.adapter()
+    repo = Config.repo()
+
+    {sql, params} = summaries_query(adapter.dialect(), adapter, embedding_str, owner_id, limit, min_score)
+
+    case repo.query(sql, params) do
+      {:ok, %{rows: rows, columns: columns}} ->
+        {:ok, Enum.map(rows, fn row -> Recollect.Util.row_to_map(columns, row) end)}
+
+      {:error, reason} ->
+        Logger.error("Recollect vector search (document summaries) failed: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  defp do_top_chunks_for_document(embedding_str, document_id, limit) do
+    adapter = Config.adapter()
+    repo = Config.repo()
+
+    {sql, params} = top_chunks_query(adapter.dialect(), adapter, embedding_str, document_id, limit)
+
+    case repo.query(sql, params) do
+      {:ok, %{rows: rows, columns: columns}} ->
+        {:ok, Enum.map(rows, fn row -> Recollect.Util.row_to_map(columns, row) end)}
+
+      {:error, reason} ->
+        Logger.error("Recollect summary chunk fetch failed: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  defp summaries_query(:postgres, _adapter, embedding_str, owner_id, limit, min_score) do
+    sql = """
+    SELECT
+      md.id AS document_id, md.title, md.summary,
+      (1 - (md.summary_embedding <=> $1::text::vector)) AS score
+    FROM recollect_documents md
+    WHERE md.owner_id = $2
+      AND md.summary_embedding IS NOT NULL
+      AND (1 - (md.summary_embedding <=> $1::text::vector)) >= $3
+    ORDER BY md.summary_embedding <=> $1::text::vector
+    LIMIT $4
+    """
+
+    {sql, [embedding_str, Recollect.Util.uuid_to_bin(owner_id), min_score, limit]}
+  end
+
+  defp summaries_query(dialect, adapter, embedding_str, owner_id, limit, min_score)
+       when dialect in [:sqlite, :libsql] do
+    similarity = adapter.vector_similarity_sql("md.summary_embedding", "?")
+    distance = adapter.vector_distance_sql("md.summary_embedding", "?")
+
+    sql = """
+    SELECT
+      md.id AS document_id, md.title, md.summary,
+      #{similarity} AS score
+    FROM recollect_documents md
+    WHERE md.owner_id = ?
+      AND md.summary_embedding IS NOT NULL
+      AND #{similarity} >= ?
+    ORDER BY #{distance}
+    LIMIT ?
+    """
+
+    {sql, [embedding_str, owner_id, embedding_str, min_score, embedding_str, limit]}
+  end
+
+  defp top_chunks_query(:postgres, _adapter, embedding_str, document_id, limit) do
+    sql = """
+    SELECT
+      mc.id, mc.content, mc.document_id, mc.sequence,
+      mc.token_count, mc.metadata,
+      (1 - (mc.embedding <=> $1::text::vector)) AS score
+    FROM recollect_chunks mc
+    WHERE mc.document_id = $2
+      AND mc.embedding IS NOT NULL
+    ORDER BY mc.embedding <=> $1::text::vector
+    LIMIT $3
+    """
+
+    {sql, [embedding_str, Recollect.Util.uuid_to_bin(document_id), limit]}
+  end
+
+  defp top_chunks_query(dialect, adapter, embedding_str, document_id, limit)
+       when dialect in [:sqlite, :libsql] do
+    distance = adapter.vector_distance_sql("mc.embedding", "?")
+
+    sql = """
+    SELECT
+      mc.id, mc.content, mc.document_id, mc.sequence,
+      mc.token_count, mc.metadata
+    FROM recollect_chunks mc
+    WHERE mc.document_id = ?
+      AND mc.embedding IS NOT NULL
+    ORDER BY #{distance}
+    LIMIT ?
+    """
+
+    {sql, [document_id, embedding_str, limit]}
   end
 
   # ── Filter Builders ─────────────────────────────────────────────────

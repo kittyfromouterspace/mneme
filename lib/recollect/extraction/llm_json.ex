@@ -7,19 +7,18 @@ defmodule Recollect.Extraction.LlmJson do
   """
   @behaviour Recollect.ExtractionProvider
 
-  alias Recollect.Schema.Entity
-  alias Recollect.Schema.Relation
+  alias Recollect.Ontology
 
   require Logger
 
-  @entity_types Enum.join(Entity.entity_types(), ", ")
-  @relation_types Enum.join(Relation.relation_types(), ", ")
+  @entity_types Enum.join(Ontology.entity_types(), ", ")
+  @relation_types Enum.join(Ontology.relation_types(), ", ")
 
   @extraction_prompt """
   You are an expert knowledge graph builder.
 
   Given the following text, extract:
-  1. **Entities**: Important concepts, people, goals, obstacles, strategies, emotions, domains, places, events, or tools mentioned.
+  1. **Entities**: Important people, projects, tools, services, hosts, concepts, incidents, tickets, runbooks, obstacles, goals, decisions, dependencies, configs, or credential references mentioned.
   2. **Relations**: How the entities relate to each other.
 
   Rules:
@@ -116,27 +115,28 @@ defmodule Recollect.Extraction.LlmJson do
     |> String.replace(~r/,(\s*[}\]])/, "\\1")
   end
 
+  # Type validation is deliberately loose here — `Recollect.Ontology`
+  # canonicalizes or flags custom types downstream (in the Extractor), so
+  # this layer only ensures the structural shape is usable.
   defp validate_entities(entities) when is_list(entities) do
-    valid_types = Entity.entity_types()
-
     Enum.filter(entities, fn entity ->
       is_map(entity) &&
         is_binary(entity["name"]) &&
         String.length(entity["name"]) > 0 &&
-        entity["type"] in valid_types
+        is_binary(entity["type"]) &&
+        String.length(entity["type"]) > 0
     end)
   end
 
   defp validate_entities(_), do: []
 
   defp validate_relations(relations) when is_list(relations) do
-    valid_types = Relation.relation_types()
-
     Enum.filter(relations, fn rel ->
       is_map(rel) &&
         is_binary(rel["from"]) &&
         is_binary(rel["to"]) &&
-        rel["type"] in valid_types
+        is_binary(rel["type"]) &&
+        String.length(rel["type"]) > 0
     end)
   end
 

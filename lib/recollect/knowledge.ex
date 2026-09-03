@@ -179,6 +179,52 @@ defmodule Recollect.Knowledge do
   end
 
   @doc """
+  Mark `new_entry_id` as superseding `old_entry_id`.
+
+  Creates a `"supersedes"` edge new → old and stamps the old entry's
+  metadata with `superseded_at` (ISO8601) and `superseded_by`. Unless
+  `keep_strength: true` is passed, the old entry's `half_life_days` and
+  `confidence` are zeroed so decay and ranking treat it as spent.
+
+  Superseded entries are excluded from vector entry results and edge
+  traversal by default; pass `include_superseded: true` to search to opt
+  out.
+  """
+  def supersede(new_entry_id, old_entry_id, opts \\ []) when is_list(opts) do
+    Recollect.Telemetry.span(
+      [:recollect, :supersede],
+      %{new_entry_id: new_entry_id, old_entry_id: old_entry_id},
+      fn ->
+        repo = Config.repo()
+
+        case repo.get(Entry, old_entry_id) do
+          nil ->
+            {:error, :not_found}
+
+          %Entry{} = old ->
+            with {:ok, _edge} <- connect(new_entry_id, old_entry_id, "supersedes") do
+              metadata =
+                (old.metadata || %{})
+                |> Map.put("superseded_at", DateTime.utc_now() |> DateTime.to_iso8601())
+                |> Map.put("superseded_by", new_entry_id)
+
+              attrs =
+                if Keyword.get(opts, :keep_strength, false) do
+                  %{metadata: metadata}
+                else
+                  %{metadata: metadata, half_life_days: 0.0, confidence: 0.0}
+                end
+
+              old
+              |> Entry.changeset(attrs)
+              |> repo.update()
+            end
+        end
+      end
+    )
+  end
+
+  @doc """
   Apply supersession: demote old entries matching entity+relation pattern.
   New entry supersedes old ones by setting their confidence to 0.1.
   """

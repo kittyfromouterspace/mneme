@@ -1,7 +1,11 @@
 defmodule Recollect.Schema.Entity do
   @moduledoc """
   Named entity extracted from chunks via LLM.
-  10 entity types with mention counting and prominence tracking.
+
+  The type vocabulary is governed by `Recollect.Ontology` (canonical types +
+  synonyms); custom types are persisted too, flagged `custom_type: true` in
+  `properties`, rather than rejected at the schema boundary. `entity_types/0`
+  retains the original 10-type list for backwards compatibility.
   """
   use Ecto.Schema
 
@@ -49,7 +53,6 @@ defmodule Recollect.Schema.Entity do
       :collection_id
     ])
     |> validate_required([:name, :entity_type, :owner_id, :collection_id])
-    |> validate_inclusion(:entity_type, @entity_types)
     |> unique_constraint([:collection_id, :name, :entity_type])
   end
 

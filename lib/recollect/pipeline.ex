@@ -13,15 +13,31 @@ defmodule Recollect.Pipeline do
   alias Recollect.Pipeline.Embedder
   alias Recollect.Pipeline.Extractor
   alias Recollect.Schema.Chunk
+  alias Recollect.Schema.Document
   alias Recollect.Schema.PipelineRun
 
   require Logger
 
+  @summary_prompt """
+  You are a concise technical summarizer.
+
+  Summarize the following document in at most 3-4 sentences. Capture what the
+  document IS (its gist), the key entities/systems it concerns, and why someone
+  would search for it. Plain text only, no headings, no bullet points.
+  """
+
   @doc """
   Run the full pipeline synchronously on a document.
   Returns `{:ok, pipeline_run}` or `{:error, reason}`.
+
+  Quarantined documents are refused immediately with `{:error, :quarantined}`;
+  use `retry_quarantined/2` to reset and reprocess them.
   """
-  def process(document, opts \\ []) do
+  def process(document, opts \\ [])
+
+  def process(%Document{status: "quarantined"}, _opts), do: {:error, :quarantined}
+
+  def process(document, opts) do
     telemetry_metadata = %{document_id: document.id, owner_id: document.owner_id}
 
     Recollect.Telemetry.span([:recollect, :pipeline], telemetry_metadata, fn ->
@@ -74,19 +90,20 @@ defmodule Recollect.Pipeline do
                  },
                  repo
                ),
-             {:ok, _} <- do_embed_entities(extraction.entities),
-             final_tokens = embedding_usage[:tokens_used] || 0,
-             {:ok, updated_run} <-
-               update_run(
-                 run,
-                 "complete",
-                 %{
-                   tokens_used: final_tokens
-                 },
-                 repo
-               ) do
+              {:ok, _} <- do_embed_entities(extraction.entities),
+              :ok <- do_summarize(document),
+              final_tokens = embedding_usage[:tokens_used] || 0,
+              {:ok, updated_run} <-
+                update_run(
+                  run,
+                  "complete",
+                  %{
+                    tokens_used: final_tokens
+                  },
+                  repo
+                ) do
           document
-          |> Ecto.Changeset.change(%{status: "ready"})
+          |> Ecto.Changeset.change(%{status: "ready", failed_attempts: 0})
           |> repo.update()
 
           {:ok, updated_run}
@@ -103,9 +120,7 @@ defmodule Recollect.Pipeline do
           |> PipelineRun.changeset(%{status: "failed", error: inspect(reason)})
           |> repo.update()
 
-          document
-          |> Ecto.Changeset.change(%{status: "failed"})
-          |> repo.update()
+          record_failure(document, repo)
 
           {:error, reason}
       end
@@ -121,7 +136,123 @@ defmodule Recollect.Pipeline do
     )
   end
 
+  @doc """
+  Reset a quarantined (or failed) document and reprocess it.
+
+  Accepts a `Document` struct or an id. Clears `failed_attempts`, flips the
+  status back to `"pending"`, then runs `process/2`.
+  """
+  def retry_quarantined(document_or_id, opts \\ []) do
+    repo = Config.repo()
+
+    document =
+      case document_or_id do
+        %Document{} = doc -> doc
+        id -> repo.get(Document, id)
+      end
+
+    case document do
+      nil ->
+        {:error, :not_found}
+
+      %Document{} = doc ->
+        {:ok, doc} =
+          doc
+          |> Ecto.Changeset.change(%{status: "pending", failed_attempts: 0})
+          |> repo.update()
+
+        process(doc, opts)
+    end
+  end
+
+  @doc """
+  Pipeline health snapshot over the last 24 hours.
+
+  Returns a map with:
+
+    - `:error_rate_24h` — failed / (failed + completed) runs, 0.0 when no runs
+    - `:errored_count_24h` — failed runs in the window
+    - `:completed_count_24h` — completed runs in the window
+    - `:quarantined_count` — documents currently quarantined
+    - `:oldest_pending_age_seconds` — age of the oldest pending document, nil if none
+    - `:tokens_24h` — embedding tokens consumed in the window
+    - `:cost_24h` — USD cost recorded in the window
+  """
+  def health do
+    repo = Config.repo()
+    now = DateTime.utc_now()
+    cutoff = DateTime.add(now, -24 * 3600, :second)
+
+    run_counts =
+      repo.all(
+        from(r in PipelineRun,
+          where: r.inserted_at >= ^cutoff,
+          group_by: r.status,
+          select: {r.status, count(r.id)}
+        )
+      )
+      |> Map.new()
+
+    errored = Map.get(run_counts, "failed", 0)
+    completed = Map.get(run_counts, "complete", 0)
+    total = errored + completed
+
+    tokens_24h =
+      repo.one(
+        from(r in PipelineRun,
+          where: r.inserted_at >= ^cutoff,
+          select: coalesce(sum(r.tokens_used), 0)
+        )
+      )
+
+    cost_24h =
+      repo.one(
+        from(r in PipelineRun,
+          where: r.inserted_at >= ^cutoff,
+          select: coalesce(sum(r.cost_usd), 0.0)
+        )
+      )
+
+    quarantined_count =
+      repo.one(from(d in Document, where: d.status == "quarantined", select: count(d.id)))
+
+    oldest_pending =
+      repo.one(
+        from(d in Document,
+          where: d.status == "pending",
+          select: min(d.inserted_at)
+        )
+      )
+
+    oldest_pending_age_seconds =
+      case oldest_pending do
+        nil -> nil
+        ts -> max(DateTime.diff(now, ts, :second), 0)
+      end
+
+    %{
+      error_rate_24h: if(total > 0, do: errored / total, else: 0.0),
+      errored_count_24h: errored,
+      completed_count_24h: completed,
+      quarantined_count: quarantined_count,
+      oldest_pending_age_seconds: oldest_pending_age_seconds,
+      tokens_24h: tokens_24h,
+      cost_24h: cost_24h
+    }
+  end
+
   # ── Pipeline Steps ────────────────────────────────────────────────────
+
+  # Quarantine bookkeeping: bump the failure counter; at the configured
+  # threshold the document leaves the automatic retry population entirely.
+  defp record_failure(document, repo) do
+    attempts = (document.failed_attempts || 0) + 1
+    status = if attempts >= Config.max_failed_attempts(), do: "quarantined", else: "failed"
+
+    document
+    |> Ecto.Changeset.change(%{status: status, failed_attempts: attempts})
+    |> repo.update()
+  end
 
   defp do_chunk(document, opts, repo) do
     owner_id = Keyword.fetch!(opts, :owner_id)
@@ -253,6 +384,51 @@ defmodule Recollect.Pipeline do
     {:ok, entities}
   rescue
     _ -> {:ok, entities}
+  end
+
+  # Document summary tier: a short gist per document, embedded so gist-level
+  # queries can surface the document's chunks. Strictly best-effort — a
+  # missing llm_fn, disabled embedding, or a failed call never fails the run.
+  defp do_summarize(document) do
+    cond do
+      not Config.extraction_enabled?() ->
+        Logger.debug("Recollect.Pipeline: summarization disabled (no llm_fn); skipping")
+        :ok
+
+      not Config.embedding_enabled?() ->
+        Logger.debug("Recollect.Pipeline: embedding disabled; skipping summary")
+        :ok
+
+      true ->
+        summarize_document(document)
+    end
+  end
+
+  defp summarize_document(document) do
+    llm_fn = Keyword.fetch!(Config.extraction_opts(), :llm_fn)
+
+    messages = [
+      %{role: "system", content: @summary_prompt},
+      %{role: "user", content: String.slice(document.content || "", 0, 8_000)}
+    ]
+
+    # Hard brevity cap: a summary is a retrieval handle, not an essay.
+    llm_opts = Config.extraction_opts() |> Keyword.put(:max_tokens, 500)
+
+    with {:ok, summary} when is_binary(summary) <- llm_fn.(messages, llm_opts),
+         {:ok, _} <- Embedder.embed_document_summary(document.id, String.trim(summary)) do
+      :ok
+    else
+      {:error, reason} ->
+        Logger.warning(
+          "Recollect.Pipeline: summarization failed for document #{document.id}: #{inspect(reason)}"
+        )
+
+        :ok
+
+      _other ->
+        :ok
+    end
   end
 
   defp update_run(run, status, repo) do

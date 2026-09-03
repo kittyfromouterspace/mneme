@@ -139,9 +139,25 @@ defmodule Recollect.Pipeline.Embedder do
 
   def embed_entry_async(_), do: :ok
 
+  @doc """
+  Embed a document summary and store both on the document row.
+
+  Returns `{:ok, embedding}` or `{:error, reason}`.
+  """
+  def embed_document_summary(document_id, summary) when is_binary(summary) do
+    case EmbeddingProvider.embed(summary) do
+      {:ok, embedding} ->
+        store_summary_embedding(Config.repo(), document_id, summary, embedding)
+        {:ok, embedding}
+
+      {:error, reason} ->
+        Logger.warning("Recollect.Embedder: summary embedding failed for #{document_id}: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
   @doc "Embed a query string for search (no storage)."
-  def embed_query(text) do
-    start_time = System.monotonic_time()
+  def embed_query(text) do    start_time = System.monotonic_time()
     result = EmbeddingProvider.embed(text)
     duration = System.monotonic_time() - start_time
 
@@ -152,6 +168,37 @@ defmodule Recollect.Pipeline.Embedder do
     })
 
     result
+  end
+
+  defp store_summary_embedding(repo, id, summary, embedding) do
+    adapter = Config.adapter()
+
+    {query, params} =
+      case adapter.dialect() do
+        :postgres ->
+          pgvec = if Code.ensure_loaded?(Pgvector), do: apply(Pgvector, :new, [embedding]), else: adapter.format_embedding(embedding)
+
+          {"UPDATE recollect_documents SET summary = $1, summary_embedding = $2 WHERE id = $3",
+           [summary, pgvec, Recollect.Util.uuid_to_bin(id)]}
+
+        _ ->
+          {"UPDATE recollect_documents SET summary = ?, summary_embedding = ? WHERE id = ?",
+           [summary, adapter.format_embedding(embedding), id]}
+      end
+
+    case repo.query(query, params) do
+      {:ok, _} ->
+        :ok
+
+      {:error, %DBConnection.OwnershipError{}} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Recollect.Embedder: failed to store summary embedding for #{id}: #{inspect(reason)}")
+    end
+  rescue
+    DBConnection.ConnectionError ->
+      :ok
   end
 
   defp store_embedding(repo, table, id, embedding, model_id) do

@@ -18,6 +18,9 @@ defmodule Recollect.Schema.Document do
     field(:source_id, :string)
     field(:source_version, :string)
     field(:status, :string, default: "pending")
+    field(:failed_attempts, :integer, default: 0)
+    field(:summary, :string)
+    field(:summary_embedding, Recollect.EmbeddingType)
     field(:token_count, :integer, default: 0)
     field(:metadata, :map, default: %{})
     field(:owner_id, :binary_id)
@@ -40,6 +43,9 @@ defmodule Recollect.Schema.Document do
       :source_id,
       :source_version,
       :status,
+      :failed_attempts,
+      :summary,
+      :summary_embedding,
       :token_count,
       :metadata,
       :owner_id,
@@ -48,7 +54,7 @@ defmodule Recollect.Schema.Document do
     ])
     |> validate_required([:content, :content_hash, :owner_id, :collection_id])
     |> validate_inclusion(:source_type, ~w(artifact conversation manual))
-    |> validate_inclusion(:status, ~w(pending processing ready failed))
+    |> validate_inclusion(:status, ~w(pending processing ready failed quarantined))
     |> unique_constraint([:collection_id, :source_type, :source_id])
   end
 end

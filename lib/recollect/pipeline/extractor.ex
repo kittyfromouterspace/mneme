@@ -2,18 +2,20 @@ defmodule Recollect.Pipeline.Extractor do
   @moduledoc """
   Extracts entities and relationships from text chunks using LLM structured output.
   Deduplicates and persists results with mention counting.
+
+  Post-LLM, all types pass through `Recollect.Ontology`: canonical types are
+  applied verbatim, custom types are kept and flagged `custom_type: true` in
+  properties.
   """
 
   import Ecto.Query
 
   alias Recollect.Config
+  alias Recollect.Ontology
   alias Recollect.Schema.Entity
   alias Recollect.Schema.Relation
 
   require Logger
-
-  @entity_types Entity.entity_types()
-  @relation_types Relation.relation_types()
 
   @doc """
   Extract entities and relations from a chunk's content using the configured provider.
@@ -27,11 +29,17 @@ defmodule Recollect.Pipeline.Extractor do
 
     case result do
       {:ok, %{entities: entities, relations: relations}} ->
+        entities = Enum.map(entities, &Ontology.apply_entity_type/1)
+        relations = Enum.map(relations, &Ontology.apply_relation_type/1)
+        result = {:ok, %{entities: entities, relations: relations}}
+
         Recollect.Telemetry.event([:recollect, :extract, :stop], %{
           duration: duration,
           entities_count: length(entities),
           relations_count: length(relations)
         })
+
+        result
 
       _ ->
         Recollect.Telemetry.event([:recollect, :extract, :stop], %{
@@ -39,9 +47,9 @@ defmodule Recollect.Pipeline.Extractor do
           entities_count: 0,
           relations_count: 0
         })
-    end
 
-    result
+        result
+    end
   end
 
   @doc """
@@ -91,149 +99,179 @@ defmodule Recollect.Pipeline.Extractor do
   defp upsert_entity(entity_data, collection_id, owner_id, scope_id, repo) do
     name = normalize_name(entity_data["name"] || entity_data[:name])
     entity_type = to_string(entity_data["type"] || entity_data[:entity_type])
+    properties = custom_properties(entity_data)
 
-    if entity_type in @entity_types do
-      existing =
-        repo.one(
-          from(e in Entity,
-            where: e.collection_id == ^collection_id and e.name == ^name and e.entity_type == ^entity_type
-          )
+    existing =
+      repo.one(
+        from(e in Entity,
+          where: e.collection_id == ^collection_id and e.name == ^name and e.entity_type == ^entity_type
         )
+      )
 
-      case existing do
-        nil ->
-          changeset =
-            Entity.changeset(%Entity{}, %{
-              collection_id: collection_id,
-              name: name,
-              entity_type: entity_type,
-              description: entity_data["description"] || entity_data[:description],
-              mention_count: 1,
-              first_seen_at: DateTime.utc_now(),
-              last_seen_at: DateTime.utc_now(),
-              owner_id: owner_id,
-              scope_id: scope_id
+    case existing do
+      nil ->
+        changeset =
+          Entity.changeset(%Entity{}, %{
+            collection_id: collection_id,
+            name: name,
+            entity_type: entity_type,
+            description: entity_data["description"] || entity_data[:description],
+            properties: properties,
+            mention_count: 1,
+            first_seen_at: DateTime.utc_now(),
+            last_seen_at: DateTime.utc_now(),
+            owner_id: owner_id,
+            scope_id: scope_id
+          })
+
+        case repo.insert(changeset) do
+          {:ok, entity} ->
+            Config.on_graph_change().(%{
+              type: :entity,
+              operation: :insert,
+              data: %{
+                id: entity.id,
+                name: entity.name,
+                entity_type: entity.entity_type,
+                owner_id: owner_id,
+                scope_id: scope_id
+              }
             })
 
-          case repo.insert(changeset) do
-            {:ok, entity} ->
-              Config.on_graph_change().(%{
-                type: :entity,
-                operation: :insert,
-                data: %{
-                  id: entity.id,
-                  name: entity.name,
-                  entity_type: entity.entity_type,
-                  owner_id: owner_id,
-                  scope_id: scope_id
-                }
-              })
+            {:ok, entity}
 
-              {:ok, entity}
+          error ->
+            error
+        end
 
-            error ->
-              error
-          end
+      entity ->
+        case repo.update(Entity.increment_mentions_changeset(entity)) do
+          {:ok, updated} ->
+            Config.on_graph_change().(%{
+              type: :entity,
+              operation: :update,
+              data: %{
+                id: updated.id,
+                name: updated.name,
+                entity_type: updated.entity_type,
+                owner_id: owner_id,
+                scope_id: scope_id
+              }
+            })
 
-        entity ->
-          case repo.update(Entity.increment_mentions_changeset(entity)) do
-            {:ok, updated} ->
-              Config.on_graph_change().(%{
-                type: :entity,
-                operation: :update,
-                data: %{
-                  id: updated.id,
-                  name: updated.name,
-                  entity_type: updated.entity_type,
-                  owner_id: owner_id,
-                  scope_id: scope_id
-                }
-              })
+            {:ok, updated}
 
-              {:ok, updated}
+          error ->
+            error
+        end
+    end
+  end
 
-            error ->
-              error
-          end
-      end
+  # Ontology flag: custom (non-canonical) types are kept but marked so
+  # `Recollect.Ontology.report/0` and consumers can tell them apart.
+  defp custom_properties(data) do
+    if data["custom_type"] || data[:custom_type] do
+      %{"custom_type" => true}
     else
-      {:error, "Invalid entity type: #{entity_type}"}
+      %{}
     end
   end
 
   defp upsert_relation(from_id, to_id, rel_data, owner_id, scope_id, source_chunk_id, repo) do
     relation_type = to_string(rel_data["type"] || rel_data[:relation_type])
     weight = parse_weight(rel_data["weight"] || rel_data[:weight])
+    properties = custom_properties(rel_data)
 
-    if relation_type in @relation_types do
-      existing =
-        repo.one(
-          from(r in Relation,
-            where: r.from_entity_id == ^from_id and r.to_entity_id == ^to_id and r.relation_type == ^relation_type
-          )
+    existing =
+      repo.one(
+        from(r in Relation,
+          where: r.from_entity_id == ^from_id and r.to_entity_id == ^to_id and r.relation_type == ^relation_type
         )
+      )
 
-      case existing do
-        nil ->
-          changeset =
-            Relation.changeset(%Relation{}, %{
-              from_entity_id: from_id,
-              to_entity_id: to_id,
-              relation_type: relation_type,
-              weight: weight,
-              source_chunk_id: source_chunk_id,
-              owner_id: owner_id,
-              scope_id: scope_id
+    case existing do
+      nil ->
+        # Ontology-normalized types (canonical or custom) go through a
+        # dedicated insert changeset: `Relation.changeset/2` still enforces
+        # the legacy type list, which predates the ontology vocabulary.
+        changeset = relation_insert_changeset(%{
+          from_entity_id: from_id,
+          to_entity_id: to_id,
+          relation_type: relation_type,
+          weight: weight,
+          properties: properties,
+          source_chunk_id: source_chunk_id,
+          owner_id: owner_id,
+          scope_id: scope_id
+        })
+
+        case repo.insert(changeset) do
+          {:ok, relation} ->
+            Config.on_graph_change().(%{
+              type: :relation,
+              operation: :insert,
+              data: %{
+                id: relation.id,
+                relation_type: relation.relation_type,
+                from_entity_id: from_id,
+                to_entity_id: to_id,
+                owner_id: owner_id,
+                scope_id: scope_id
+              }
             })
 
-          case repo.insert(changeset) do
-            {:ok, relation} ->
-              Config.on_graph_change().(%{
-                type: :relation,
-                operation: :insert,
-                data: %{
-                  id: relation.id,
-                  relation_type: relation.relation_type,
-                  from_entity_id: from_id,
-                  to_entity_id: to_id,
-                  owner_id: owner_id,
-                  scope_id: scope_id
-                }
-              })
+            {:ok, relation}
 
-              {:ok, relation}
+          error ->
+            error
+        end
 
-            error ->
-              error
-          end
+      relation ->
+        new_weight = (relation.weight + weight) / 2.0
 
-        relation ->
-          new_weight = (relation.weight + weight) / 2.0
+        case repo.update(Relation.changeset(relation, %{weight: new_weight})) do
+          {:ok, updated} ->
+            Config.on_graph_change().(%{
+              type: :relation,
+              operation: :update,
+              data: %{
+                id: updated.id,
+                relation_type: updated.relation_type,
+                from_entity_id: from_id,
+                to_entity_id: to_id,
+                owner_id: owner_id,
+                scope_id: scope_id
+              }
+            })
 
-          case repo.update(Relation.changeset(relation, %{weight: new_weight})) do
-            {:ok, updated} ->
-              Config.on_graph_change().(%{
-                type: :relation,
-                operation: :update,
-                data: %{
-                  id: updated.id,
-                  relation_type: updated.relation_type,
-                  from_entity_id: from_id,
-                  to_entity_id: to_id,
-                  owner_id: owner_id,
-                  scope_id: scope_id
-                }
-              })
+            {:ok, updated}
 
-              {:ok, updated}
-
-            error ->
-              error
-          end
-      end
-    else
-      {:error, "Invalid relation type: #{relation_type}"}
+          error ->
+            error
+        end
     end
+  end
+
+  # Insert changeset for ontology-typed relations: same constraints as
+  # `Relation.changeset/2` minus the legacy `validate_inclusion`, so
+  # canonical ontology types (fixes, owns, deployed_on, …) and custom types
+  # persist. The DB-level no-self and uniqueness constraints still apply.
+  defp relation_insert_changeset(attrs) do
+    %Relation{}
+    |> Ecto.Changeset.cast(attrs, [
+      :relation_type,
+      :weight,
+      :properties,
+      :owner_id,
+      :scope_id,
+      :from_entity_id,
+      :to_entity_id,
+      :source_chunk_id
+    ])
+    |> Ecto.Changeset.validate_required([:relation_type, :from_entity_id, :to_entity_id, :owner_id])
+    |> Ecto.Changeset.validate_number(:weight, greater_than_or_equal_to: 0.0, less_than_or_equal_to: 1.0)
+    |> Ecto.Changeset.check_constraint(:no_self_relation, name: :no_self_relation)
+    |> Ecto.Changeset.unique_constraint([:from_entity_id, :to_entity_id, :relation_type])
   end
 
   defp normalize_name(name) when is_binary(name), do: name |> String.downcase() |> String.trim()

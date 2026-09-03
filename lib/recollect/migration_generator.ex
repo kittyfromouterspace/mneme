@@ -120,6 +120,9 @@ defmodule Recollect.MigrationGenerator do
       add :source_id, :string
       add :source_version, :string
       add :status, :string, null: false, default: "pending"
+      add :failed_attempts, :integer, null: false, default: 0
+      add :summary, :text
+      #{generate_vector_column(adapter, :summary_embedding, dimensions)}
       add :token_count, :integer, default: 0
       add :metadata, :map, default: %{}
       add :owner_id, #{inspect(uuid_type_atom)}, null: false
@@ -171,6 +174,8 @@ defmodule Recollect.MigrationGenerator do
       add :from_entity_id, references(:#{prefix}entities, type: :binary_id, on_delete: :delete_all), null: false
       add :to_entity_id, references(:#{prefix}entities, type: :binary_id, on_delete: :delete_all), null: false
       add :source_chunk_id, references(:#{prefix}chunks, type: :binary_id, on_delete: :nilify_all)
+      #{generate_vector_column(adapter, :triplet_embedding, dimensions)}
+      add :triplet_embedding_model_id, :string
       timestamps(type: :utc_datetime_usec)
     end
 
@@ -269,6 +274,8 @@ defmodule Recollect.MigrationGenerator do
     create index(:#{prefix}documents, [:owner_id])
     create index(:#{prefix}documents, [:scope_id])
 
+    #{generate_vector_index(adapter, "#{prefix}documents", :summary_embedding, dimensions)}
+
     create index(:#{prefix}chunks, [:document_id])
     create index(:#{prefix}chunks, [:owner_id])
     create index(:#{prefix}chunks, [:scope_id])
@@ -284,6 +291,8 @@ defmodule Recollect.MigrationGenerator do
     create unique_index(:#{prefix}relations, [:from_entity_id, :to_entity_id, :relation_type])
     create index(:#{prefix}relations, [:owner_id])
     create index(:#{prefix}relations, [:scope_id])
+
+    #{generate_vector_index(adapter, "#{prefix}relations", :triplet_embedding, dimensions)}
 
     #{generate_self_relation_constraint(adapter, "#{prefix}relations")}
 

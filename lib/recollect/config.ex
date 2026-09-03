@@ -179,6 +179,15 @@ defmodule Recollect.Config do
   end
 
   @doc """
+  Consecutive pipeline failures before a document is quarantined.
+
+  Configure via `config :recollect, max_failed_attempts: 5`. Default: 3.
+  """
+  def max_failed_attempts do
+    Application.get_env(:recollect, :max_failed_attempts, 3)
+  end
+
+  @doc """
   Optional callback invoked when entities or relations are persisted.
 
   Called by `Recollect.Pipeline.Extractor.persist_entities/2` and

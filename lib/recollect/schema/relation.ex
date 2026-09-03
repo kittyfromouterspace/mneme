@@ -19,6 +19,8 @@ defmodule Recollect.Schema.Relation do
     field(:properties, :map, default: %{})
     field(:owner_id, :binary_id)
     field(:scope_id, :binary_id)
+    field(:triplet_embedding, Recollect.EmbeddingType)
+    field(:triplet_embedding_model_id, :string)
 
     belongs_to(:from_entity, Entity, type: :binary_id)
     belongs_to(:to_entity, Entity, type: :binary_id)

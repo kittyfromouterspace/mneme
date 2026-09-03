@@ -68,6 +68,31 @@ defmodule Recollect do
     Pipeline.process_async(document, opts)
   end
 
+  @doc "Reset a quarantined/failed document and reprocess it."
+  def retry_quarantined(document_or_id, opts \\ []) do
+    Pipeline.retry_quarantined(document_or_id, opts)
+  end
+
+  @doc "Pipeline health snapshot over the last 24 hours (see `Recollect.Pipeline.health/0`)."
+  def pipeline_health do
+    Pipeline.health()
+  end
+
+  @doc """
+  Mark `new_entry_id` as superseding `old_entry_id`.
+
+  Creates a `"supersedes"` edge and stamps the old entry's metadata.
+  Pass `keep_strength: true` to preserve the old entry's confidence/decay.
+  """
+  def supersede(new_entry_id, old_entry_id, opts \\ []) do
+    Recollect.Knowledge.supersede(new_entry_id, old_entry_id, opts)
+  end
+
+  @doc "Ontology vocabulary usage report (see `Recollect.Ontology.report/0`)."
+  def ontology_report do
+    Recollect.Ontology.report()
+  end
+
   @doc """
   Store a knowledge entry with auto-embedding.
 

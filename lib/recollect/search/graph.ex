@@ -36,16 +36,27 @@ defmodule Recollect.Search.Graph do
   @doc """
   Follow edges from entry IDs (Tier 2 lightweight edges).
   Returns related entries within N hops.
+
+  Entries superseded via a `"supersedes"` edge are excluded unless
+  `include_superseded: true` is passed.
   """
   def follow_edges(entry_ids, opts \\ []) when is_list(entry_ids) do
     hops = Keyword.get(opts, :hops, 1)
     limit = Keyword.get(opts, :limit, 5)
+    include_superseded = Keyword.get(opts, :include_superseded, false)
     repo = Config.repo()
 
     if entry_ids == [] do
       {:ok, []}
     else
       bin_ids = entry_ids |> Enum.map(&Recollect.Util.uuid_to_bin/1) |> Enum.reject(&is_nil/1)
+
+      superseded_clause =
+        if include_superseded do
+          ""
+        else
+          "AND NOT EXISTS (SELECT 1 FROM recollect_edges se WHERE se.target_entry_id = me.id AND se.relation = 'supersedes')"
+        end
 
       sql = """
       WITH RECURSIVE edge_walk AS (
@@ -72,6 +83,7 @@ defmodule Recollect.Search.Graph do
       JOIN recollect_entries me ON me.id = ew.entry_id
       WHERE me.id != ALL($1)
         AND me.entry_type != 'archived'
+        #{superseded_clause}
       LIMIT $3
       """
 
