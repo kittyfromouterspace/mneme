@@ -113,7 +113,7 @@ defmodule Recollect.Learner.CodingAgent.OpenCode do
     where = Enum.join(where_clauses, " AND ")
 
     query = """
-    SELECT s.id, s.title, s.directory, p.path
+    SELECT s.id, s.title, s.directory, COALESCE(p.worktree, s.directory) AS path
     FROM session s
     LEFT JOIN project p ON s.project_id = p.id
     WHERE #{where}
